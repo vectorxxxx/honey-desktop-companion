@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Honey.Domain\Honey.Domain.csproj" />
+    <ProjectReference Include="..\Honey.Simulation\Honey.Simulation.csproj" />
+    <ProjectReference Include="..\Honey.Content.WhiteJadeSpider\Honey.Content.WhiteJadeSpider.csproj" />
+    <ProjectReference Include="..\Honey.Persistence\Honey.Persistence.csproj" />
+    <ProjectReference Include="..\Honey.Rendering\Honey.Rendering.csproj" />
+    <ProjectReference Include="..\Honey.Integrations\Honey.Integrations.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="SkiaSharp.Views.WPF" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

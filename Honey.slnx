@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Honey.Content.WhiteJadeSpider/Honey.Content.WhiteJadeSpider.csproj" />
+    <Project Path="src/Honey.Desktop/Honey.Desktop.csproj" />
+    <Project Path="src/Honey.Domain/Honey.Domain.csproj" />
+    <Project Path="src/Honey.Integrations/Honey.Integrations.csproj" />
+    <Project Path="src/Honey.Persistence/Honey.Persistence.csproj" />
+    <Project Path="src/Honey.Rendering/Honey.Rendering.csproj" />
+    <Project Path="src/Honey.Simulation/Honey.Simulation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Honey.ArchitectureTests/Honey.ArchitectureTests.csproj" />
+    <Project Path="tests/Honey.Content.WhiteJadeSpider.Tests/Honey.Content.WhiteJadeSpider.Tests.csproj" />
+    <Project Path="tests/Honey.Desktop.Tests/Honey.Desktop.Tests.csproj" />
+    <Project Path="tests/Honey.Domain.Tests/Honey.Domain.Tests.csproj" />
+    <Project Path="tests/Honey.Integrations.Tests/Honey.Integrations.Tests.csproj" />
+    <Project Path="tests/Honey.Persistence.Tests/Honey.Persistence.Tests.csproj" />
+    <Project Path="tests/Honey.Rendering.Tests/Honey.Rendering.Tests.csproj" />
+    <Project Path="tests/Honey.Simulation.Tests/Honey.Simulation.Tests.csproj" />
+  </Folder>
+</Solution>
