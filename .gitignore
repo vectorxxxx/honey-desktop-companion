@@ -4,9 +4,9 @@ bin/
 obj/
 artifacts/
 .superpowers/
+.worktrees/
 *.user
 *.suo
 *.db-wal
 *.db-shm
 *.log
-
