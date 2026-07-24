@@ -1,0 +1,12 @@
+.vs/
+.idea/
+bin/
+obj/
+artifacts/
+.superpowers/
+*.user
+*.suo
+*.db-wal
+*.db-shm
+*.log
+
