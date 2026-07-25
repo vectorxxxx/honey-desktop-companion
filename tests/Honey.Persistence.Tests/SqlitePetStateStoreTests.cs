@@ -117,6 +117,83 @@ public sealed class SqlitePetStateStoreTests
     }
 
     [Fact]
+    public async Task LoadAsync_WhenIntegerEnumAppearsInJson_ThrowsInvalidDataException()
+    {
+        using var database = new TemporaryDatabase();
+        var store = new SqlitePetStateStore(database.Path);
+        var state = CreateState();
+        await store.InitializeAsync(TestContext.Current.CancellationToken);
+        var json = System.Text.Json.JsonSerializer.Serialize(state, JsonOptionsForTest)
+            .Replace("\"mood\":\"Curious\"", "\"mood\":999", StringComparison.Ordinal);
+        await InsertRawStateAsync(
+            database.Path, state.PetId, json, state.SpeciesId, state.UpdatedAt);
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(
+            () => store.LoadAsync(state.PetId, TestContext.Current.CancellationToken));
+
+        Assert.Contains(state.PetId.ToString(), exception.Message);
+    }
+
+    [Theory]
+    [InlineData(999, 0)]
+    [InlineData(0, 999)]
+    public async Task SaveAsync_WhenEnumIsUndefined_ThrowsArgumentException(
+        int mood,
+        int mode)
+    {
+        using var database = new TemporaryDatabase();
+        var store = new SqlitePetStateStore(database.Path);
+        var state = CreateState() with { Mood = (PetMood)mood, Mode = (PetMode)mode };
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
+            () => store.SaveAsync(state, TestContext.Current.CancellationToken));
+
+        Assert.Contains("状态", exception.Message);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenPreviousBehaviorIsBlank_ThrowsArgumentException()
+    {
+        using var database = new TemporaryDatabase();
+        var store = new SqlitePetStateStore(database.Path);
+        var state = CreateState() with { PreviousBehavior = new BehaviorKey(" ") };
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => store.SaveAsync(state, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task SaveAndLoadAsync_WhenNotExplicitlyInitialized_InitializesDatabase()
+    {
+        using var database = new TemporaryDatabase();
+        var store = new SqlitePetStateStore(database.Path);
+        var state = CreateState();
+
+        await store.SaveAsync(state, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            state,
+            await store.LoadAsync(state.PetId, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task InitializeAndSaveAsync_FromDifferentStores_DoNotRaceMigration()
+    {
+        using var database = new TemporaryDatabase();
+        var initializer = new SqlitePetStateStore(database.Path);
+        var saver = new SqlitePetStateStore(database.Path);
+        var state = CreateState();
+
+        await Task.WhenAll(
+            initializer.InitializeAsync(TestContext.Current.CancellationToken),
+            saver.SaveAsync(state, TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            state,
+            await initializer.LoadAsync(state.PetId, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task PublicAsyncMethods_WhenTokenAlreadyCanceled_ThrowOperationCanceledException()
     {
         using var database = new TemporaryDatabase();

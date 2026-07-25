@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Honey.Domain.Model;
@@ -7,16 +8,20 @@ namespace Honey.Persistence;
 
 public sealed class SqlitePetStateStore : IPetStateStore
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> PathGates =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = false,
         WriteIndented = false,
         NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
-        Converters = { new JsonStringEnumConverter() }
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) }
     };
 
     private readonly string _databasePath;
+    private readonly SemaphoreSlim _pathGate;
     private readonly SchemaMigrator _migrator;
 
     public SqlitePetStateStore(string databasePath)
@@ -32,26 +37,49 @@ public sealed class SqlitePetStateStore : IPetStateStore
         }
 
         _databasePath = Path.GetFullPath(databasePath);
+        _pathGate = PathGates.GetOrAdd(_databasePath, _ => new SemaphoreSlim(1, 1));
         _migrator = migrator ?? throw new ArgumentNullException(nameof(migrator));
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await _pathGate.WaitAsync(cancellationToken);
+        try
+        {
+            await InitializeCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            _pathGate.Release();
+        }
+    }
 
+    private async Task InitializeCoreAsync(CancellationToken cancellationToken)
+    {
         var directory = Path.GetDirectoryName(_databasePath)
             ?? throw new InvalidOperationException($"无法确定数据库目录：{_databasePath}");
         Directory.CreateDirectory(directory);
-
-        if (File.Exists(_databasePath) && new FileInfo(_databasePath).Length > 0)
-        {
-            File.Copy(_databasePath, _databasePath + ".backup", overwrite: true);
-        }
+        var existedAndWasNonEmpty =
+            File.Exists(_databasePath) && new FileInfo(_databasePath).Length > 0;
 
         try
         {
             await using var connection = CreateConnection();
             await connection.OpenAsync(cancellationToken);
+            await EnsureHealthyAsync(connection, cancellationToken);
+            var version = await SchemaMigrator.GetVersionAsync(connection, cancellationToken);
+            if (version > SchemaMigrator.CurrentVersion)
+            {
+                throw new InvalidOperationException(
+                    $"数据库版本 {version} 高于当前支持版本 {SchemaMigrator.CurrentVersion}，无法迁移。");
+            }
+
+            if (existedAndWasNonEmpty && version < SchemaMigrator.CurrentVersion)
+            {
+                await CreateConsistentBackupAsync(connection, cancellationToken);
+            }
+
             await _migrator.MigrateAsync(connection, cancellationToken);
         }
         catch (OperationCanceledException)
@@ -68,10 +96,24 @@ public sealed class SqlitePetStateStore : IPetStateStore
 
     public async Task SaveAsync(PetState state, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(state);
         cancellationToken.ThrowIfCancellationRequested();
-        ValidateState(state, state.PetId);
+        ArgumentNullException.ThrowIfNull(state);
+        ValidateStateForSave(state);
 
+        await _pathGate.WaitAsync(cancellationToken);
+        try
+        {
+            await InitializeCoreAsync(cancellationToken);
+            await SaveCoreAsync(state, cancellationToken);
+        }
+        finally
+        {
+            _pathGate.Release();
+        }
+    }
+
+    private async Task SaveCoreAsync(PetState state, CancellationToken cancellationToken)
+    {
         var json = JsonSerializer.Serialize(state, JsonOptions);
         await using var connection = CreateConnection();
         await connection.OpenAsync(cancellationToken);
@@ -97,9 +139,9 @@ public sealed class SqlitePetStateStore : IPetStateStore
             await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
-        catch
+        catch (Exception originalException)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            await TryRollbackWithoutMaskingAsync(transaction, originalException);
             throw;
         }
     }
@@ -112,6 +154,22 @@ public sealed class SqlitePetStateStore : IPetStateStore
             throw new ArgumentException("灵兽 ID 不能为空。", nameof(petId));
         }
 
+        await _pathGate.WaitAsync(cancellationToken);
+        try
+        {
+            await InitializeCoreAsync(cancellationToken);
+            return await LoadCoreAsync(petId, cancellationToken);
+        }
+        finally
+        {
+            _pathGate.Release();
+        }
+    }
+
+    private async Task<PetState?> LoadCoreAsync(
+        Guid petId,
+        CancellationToken cancellationToken)
+    {
         await using var connection = CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -164,12 +222,93 @@ public sealed class SqlitePetStateStore : IPetStateStore
         }
     }
 
-    private SqliteConnection CreateConnection()
+    private SqliteConnection CreateConnection() => CreateConnection(_databasePath);
+
+    private async Task CreateConsistentBackupAsync(
+        SqliteConnection source,
+        CancellationToken cancellationToken)
+    {
+        var backupPath = _databasePath + ".backup";
+        var temporaryPath = backupPath + ".tmp";
+        if (File.Exists(temporaryPath))
+        {
+            File.Delete(temporaryPath);
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using (var destination = CreateConnection(temporaryPath))
+            {
+                await destination.OpenAsync(cancellationToken);
+                source.BackupDatabase(destination);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await using (var verification = CreateConnection(
+                temporaryPath,
+                SqliteOpenMode.ReadOnly))
+            {
+                await verification.OpenAsync(cancellationToken);
+                await EnsureHealthyAsync(verification, cancellationToken);
+            }
+
+            if (File.Exists(backupPath))
+            {
+                File.Replace(temporaryPath, backupPath, null);
+            }
+            else
+            {
+                File.Move(temporaryPath, backupPath);
+            }
+        }
+        finally
+        {
+            foreach (var temporaryFile in new[]
+            {
+                temporaryPath,
+                temporaryPath + "-wal",
+                temporaryPath + "-shm",
+                temporaryPath + "-journal"
+            })
+            {
+                if (File.Exists(temporaryFile))
+                {
+                    File.Delete(temporaryFile);
+                }
+            }
+        }
+    }
+
+    private static async Task EnsureHealthyAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA quick_check;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var results = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(reader.GetString(0));
+        }
+
+        if (results.Count != 1
+            || !string.Equals(results[0], "ok", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"SQLite 健康检查失败：{string.Join("；", results)}");
+        }
+    }
+
+    private SqliteConnection CreateConnection(
+        string databasePath,
+        SqliteOpenMode mode = SqliteOpenMode.ReadWriteCreate)
     {
         var builder = new SqliteConnectionStringBuilder
         {
-            DataSource = _databasePath,
-            Mode = SqliteOpenMode.ReadWriteCreate,
+            DataSource = databasePath,
+            Mode = mode,
             Pooling = false
         };
         return new SqliteConnection(builder.ConnectionString);
@@ -185,6 +324,17 @@ public sealed class SqlitePetStateStore : IPetStateStore
         if (string.IsNullOrWhiteSpace(state.SpeciesId))
         {
             throw new InvalidDataException("存档中的物种 ID 不能为空。");
+        }
+
+        if (!Enum.IsDefined(state.Mood) || !Enum.IsDefined(state.Mode))
+        {
+            throw new InvalidDataException("存档中的情绪或模式值无效。");
+        }
+
+        if (state.PreviousBehavior is { } behavior
+            && string.IsNullOrWhiteSpace(behavior.Value))
+        {
+            throw new InvalidDataException("存档中的上一行为键不能为空。");
         }
 
         var needs = new[]
@@ -208,6 +358,35 @@ public sealed class SqlitePetStateStore : IPetStateStore
         if (!double.IsFinite(state.Scale) || state.Scale <= 0)
         {
             throw new InvalidDataException("存档中的缩放值必须为大于零的有限数。");
+        }
+    }
+
+    private static void ValidateStateForSave(PetState state)
+    {
+        try
+        {
+            ValidateState(state, state.PetId);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new ArgumentException(
+                $"待保存的灵兽状态不合法：{exception.Message}",
+                nameof(state),
+                exception);
+        }
+    }
+
+    private static async Task TryRollbackWithoutMaskingAsync(
+        SqliteTransaction transaction,
+        Exception originalException)
+    {
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+        }
+        catch (Exception rollbackException)
+        {
+            originalException.Data["Honey.Persistence.RollbackException"] = rollbackException;
         }
     }
 }

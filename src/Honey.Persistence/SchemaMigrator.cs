@@ -18,7 +18,7 @@ public sealed class SchemaMigrator
             throw new InvalidOperationException("执行迁移前必须先打开 SQLite 连接。");
         }
 
-        var existingVersion = await ReadVersionAsync(connection, cancellationToken);
+        var existingVersion = await GetVersionAsync(connection, cancellationToken);
         if (existingVersion > CurrentVersion)
         {
             throw new InvalidOperationException(
@@ -64,14 +64,14 @@ public sealed class SchemaMigrator
             await command.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
-        catch
+        catch (Exception originalException)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            await TryRollbackWithoutMaskingAsync(transaction, originalException);
             throw;
         }
     }
 
-    private static async Task<int> ReadVersionAsync(
+    internal static async Task<int> GetVersionAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)
     {
@@ -79,5 +79,19 @@ public sealed class SchemaMigrator
         command.CommandText = "PRAGMA user_version;";
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task TryRollbackWithoutMaskingAsync(
+        SqliteTransaction transaction,
+        Exception originalException)
+    {
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+        }
+        catch (Exception rollbackException)
+        {
+            originalException.Data["Honey.Persistence.RollbackException"] = rollbackException;
+        }
     }
 }
