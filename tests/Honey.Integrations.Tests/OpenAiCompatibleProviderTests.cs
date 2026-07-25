@@ -85,6 +85,7 @@ public sealed class OpenAiCompatibleProviderTests
     [InlineData(HttpStatusCode.TooManyRequests, "rate_limited")]
     [InlineData(HttpStatusCode.InternalServerError, "server_error")]
     [InlineData(HttpStatusCode.BadRequest, "bad_request")]
+    [InlineData(HttpStatusCode.Redirect, "redirect")]
     public async Task CompleteAsync_将HTTP失败映射为稳定错误码(
         HttpStatusCode status,
         string failureCode)
@@ -146,6 +147,28 @@ public sealed class OpenAiCompatibleProviderTests
         Assert.Equal("response_too_large", result.FailureCode);
     }
 
+    [Theory]
+    [InlineData(65_536, "invalid_json")]
+    [InlineData(65_537, "response_too_large")]
+    public async Task CompleteAsync_按实际流字节执行64KiB边界(
+        int byteCount,
+        string failureCode)
+    {
+        using var client = new HttpClient(new StubHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new MisleadingLengthContent(
+                    Enumerable.Repeat((byte)'x', byteCount).ToArray(),
+                    declaredLength: 1)
+            })));
+
+        var result = await CreateProvider(client).CompleteAsync(
+            new AiCompanionRequest("你好", "常态", []),
+            CancellationToken.None);
+
+        Assert.Equal(failureCode, result.FailureCode);
+    }
+
     [Fact]
     public async Task CompleteAsync_网络异常时安全降级()
     {
@@ -167,7 +190,7 @@ public sealed class OpenAiCompatibleProviderTests
     public void Constructor_拒绝不安全地址(string endpoint)
     {
         using var client = new HttpClient();
-        Assert.Throws<ArgumentException>(
+        Assert.ThrowsAny<ArgumentException>(
             () => CreateProvider(client, endpoint));
     }
 
@@ -221,5 +244,20 @@ public sealed class OpenAiCompatibleProviderTests
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
             send(request, cancellationToken);
+    }
+
+    private sealed class MisleadingLengthContent(byte[] bytes, long declaredLength)
+        : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(
+            Stream stream,
+            TransportContext? context) =>
+            stream.WriteAsync(bytes).AsTask();
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = declaredLength;
+            return true;
+        }
     }
 }

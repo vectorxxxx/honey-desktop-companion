@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Honey.Integrations.Ai;
 
 namespace Honey.Desktop.Settings;
 
@@ -10,17 +11,20 @@ public partial class SettingsWindow : Window
     private readonly Func<AppSettings, string?, CancellationToken, Task<string>> _testAi;
     private readonly AiSettingsTestController _testController = new();
     private bool _hasStoredKey;
+    private readonly bool _configurationMatched;
     private bool _clearKey;
 
     public SettingsWindow(
         AppSettings settings,
         bool hasStoredKey,
+        bool configurationMatched,
         Func<AiSettingsSubmission, CancellationToken, Task> save,
         Func<AppSettings, string?, CancellationToken, Task<string>> testAi)
     {
         _save = save ?? throw new ArgumentNullException(nameof(save));
         _testAi = testAi ?? throw new ArgumentNullException(nameof(testAi));
         _hasStoredKey = hasStoredKey;
+        _configurationMatched = configurationMatched;
         InitializeComponent();
         Apply(settings.Normalize());
         UpdateKeyStatus();
@@ -63,10 +67,15 @@ public partial class SettingsWindow : Window
         try
         {
             var requested = Read();
-            var normalized = requested.Normalize();
-            if (requested.AiEnabled && !normalized.AiEnabled)
+            try
             {
-                ErrorText.Text = "AI 服务地址或模型无效；公网服务必须使用 HTTPS，本机服务可使用 HTTP。";
+                _ = AiEndpointValidator.StrictValidate(
+                    requested.AiEndpoint,
+                    requested.AiModel);
+            }
+            catch (AiConfigurationException exception)
+            {
+                ErrorText.Text = $"AI 配置无效：{exception.Message}";
                 return;
             }
 
@@ -80,7 +89,7 @@ public partial class SettingsWindow : Window
             }
 
             await _save(
-                new AiSettingsSubmission(normalized, key, _clearKey),
+                new AiSettingsSubmission(requested, key, _clearKey),
                 CancellationToken.None);
             DialogResult = true;
             Close();
@@ -118,7 +127,7 @@ public partial class SettingsWindow : Window
 
             TestAiButton.IsEnabled = false;
             ErrorText.Text = await _testController.RunAsync(
-                token => _testAi(Read().Normalize(), key, token),
+                token => _testAi(Read(), key, token),
                 CancellationToken.None);
         }
         catch (Exception exception)
@@ -133,7 +142,9 @@ public partial class SettingsWindow : Window
 
     private void UpdateKeyStatus() =>
         AiKeyStatus.Text = _hasStoredKey && !_clearKey
-            ? "已由 Windows 当前用户安全保存，不会回显"
+            ? _configurationMatched
+                ? "已由 Windows 当前用户安全保存，不会回显"
+                : "密钥与配置不匹配，请重新保存"
             : "尚未保存密钥";
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();

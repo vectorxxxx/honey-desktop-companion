@@ -1,3 +1,5 @@
+using Honey.Integrations.Ai;
+
 namespace Honey.Desktop.Settings;
 
 public sealed record AppSettings
@@ -10,6 +12,7 @@ public sealed record AppSettings
     public bool AiEnabled { get; init; }
     public string AiEndpoint { get; init; } = "https://api.openai.com/v1";
     public string AiModel { get; init; } = "gpt-5.6-luna";
+    public string? AiSecretBindingId { get; init; }
     public bool SoundEnabled { get; init; } = true;
     public double SoundVolume { get; init; } = 0.35;
 
@@ -18,37 +21,28 @@ public sealed record AppSettings
         var activity = ActivityLevel?.ToLowerInvariant();
         var mode = ModePreference?.ToLowerInvariant();
         var volume = double.IsFinite(SoundVolume) ? Math.Clamp(SoundVolume, 0, 1) : 0.35;
-        var endpoint = NormalizeAiEndpoint(AiEndpoint);
-        var model = string.IsNullOrWhiteSpace(AiModel) || AiModel.Trim().Length > 200
-            ? "gpt-5.6-luna"
-            : AiModel.Trim();
-        var aiConfigurationValid = endpoint is not null
-            && !string.IsNullOrWhiteSpace(AiModel)
-            && AiModel.Trim().Length <= 200;
+        AiValidatedConfiguration? aiConfiguration = null;
+        try
+        {
+            aiConfiguration = AiEndpointValidator.StrictValidate(AiEndpoint, AiModel);
+        }
+        catch (AiConfigurationException)
+        {
+            // 加载旧设置时回退默认值并在下方强制关闭 AI；发送入口仍使用严格校验。
+        }
+
         return this with
         {
             PetSize = Math.Clamp(PetSize, 60, 240),
             ActivityLevel = activity is "quiet" or "balanced" or "active" ? activity : "balanced",
             ModePreference = mode is "auto" or "normal" or "berserk" ? mode : "auto",
             SoundVolume = volume,
-            AiEndpoint = endpoint ?? "https://api.openai.com/v1",
-            AiModel = model,
-            AiEnabled = AiEnabled && aiConfigurationValid
+            AiEndpoint = aiConfiguration is null
+                ? "https://api.openai.com/v1"
+                : AiEndpoint.Trim().TrimEnd('/'),
+            AiModel = aiConfiguration?.Model ?? "gpt-5.6-luna",
+            AiEnabled = AiEnabled && aiConfiguration is not null,
+            AiSecretBindingId = aiConfiguration is null ? null : AiSecretBindingId
         };
-    }
-
-    private static string? NormalizeAiEndpoint(string? value)
-    {
-        if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
-            || !string.IsNullOrEmpty(uri.UserInfo)
-            || !string.IsNullOrEmpty(uri.Query)
-            || !string.IsNullOrEmpty(uri.Fragment)
-            || (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback))
-        {
-            return null;
-        }
-
-        return uri.ToString().TrimEnd('/');
     }
 }

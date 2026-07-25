@@ -4,11 +4,21 @@ using System.Text.Json;
 
 namespace Honey.Integrations.Security;
 
+public sealed record BoundAiSecret(
+    string ApiKey,
+    string BindingId,
+    int ConfigVersion,
+    string CanonicalEndpoint,
+    string Model)
+{
+    public const int CurrentConfigVersion = 1;
+}
+
 public interface IAiSecretStore
 {
-    Task SaveAsync(string secret, CancellationToken cancellationToken = default);
-    Task<string?> LoadAsync(CancellationToken cancellationToken = default);
     Task DeleteAsync(CancellationToken cancellationToken = default);
+    Task SaveBoundAsync(BoundAiSecret secret, CancellationToken cancellationToken = default);
+    Task<BoundAiSecret?> LoadBoundAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class DpapiSecretStore : IAiSecretStore
@@ -92,7 +102,15 @@ public sealed class DpapiSecretStore : IAiSecretStore
         }
     }
 
-    public async Task SaveAsync(string secret, CancellationToken cancellationToken = default)
+    public async Task SaveBoundAsync(
+        BoundAiSecret secret,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(secret);
+        await SavePayloadAsync(JsonSerializer.Serialize(secret), cancellationToken);
+    }
+
+    private async Task SavePayloadAsync(string secret, CancellationToken cancellationToken)
     {
         var cipherText = Protect(secret);
         await _gate.WaitAsync(cancellationToken);
@@ -138,7 +156,26 @@ public sealed class DpapiSecretStore : IAiSecretStore
         }
     }
 
-    public async Task<string?> LoadAsync(CancellationToken cancellationToken = default)
+    public async Task<BoundAiSecret?> LoadBoundAsync(CancellationToken cancellationToken = default)
+    {
+        var payload = await LoadPayloadAsync(cancellationToken);
+        if (payload is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<BoundAiSecret>(payload)
+                ?? throw new InvalidDataException("绑定密钥内容为空。");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("绑定密钥内容无效。", exception);
+        }
+    }
+
+    private async Task<string?> LoadPayloadAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
         try

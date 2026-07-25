@@ -91,11 +91,7 @@ public partial class OverlayWindow : Window
         _interactionFinalizer = new PointerInteractionFinalizer(_interactionController);
 
         InitializeComponent();
-        _thoughtTimer.Tick += (_, _) =>
-        {
-            _thoughtTimer.Stop();
-            ThoughtBubble.Visibility = Visibility.Collapsed;
-        };
+        _thoughtTimer.Tick += OnThoughtTimerTick;
         SourceInitialized += OnSourceInitialized;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -290,6 +286,7 @@ public partial class OverlayWindow : Window
         UpdateVisibilityPause();
         if (!IsVisible)
         {
+            StopThoughtBubble();
             FinalizePointerInteraction(null, complete: false);
         }
 
@@ -329,6 +326,8 @@ public partial class OverlayWindow : Window
         FinalizePointerInteraction(null, complete: false);
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
+            StopThoughtBubble();
+            _thoughtTimer.Tick -= OnThoughtTimerTick;
             _runtime.SnapshotChanged -= OnRuntimeSnapshotChanged;
             _runtime.Dispose();
             _scene.Dispose();
@@ -525,6 +524,14 @@ public partial class OverlayWindow : Window
 
     private static void ReportInputError(Exception exception) =>
         Trace.TraceError("桌面互动回调失败：{0}", exception);
+
+    private void OnThoughtTimerTick(object? sender, EventArgs e) => StopThoughtBubble();
+
+    private void StopThoughtBubble()
+    {
+        _thoughtTimer.Stop();
+        ThoughtBubble.Visibility = Visibility.Collapsed;
+    }
 
     private static string NeedBand(double value) =>
         value < 0.34 ? "低" : value < 0.67 ? "中" : "高";

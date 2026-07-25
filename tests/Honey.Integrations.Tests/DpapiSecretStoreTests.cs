@@ -28,20 +28,28 @@ public sealed class DpapiSecretStoreTests
     {
         var directory = Path.Combine(Path.GetTempPath(), $"honey-secret-{Guid.NewGuid():N}");
         var path = Path.Combine(directory, "secrets.json");
-        const string secret = "sk-file-secret";
+        var config = Honey.Integrations.Ai.AiEndpointValidator.StrictValidate(
+            "https://example.com/v1",
+            "model");
+        var secret = new BoundAiSecret(
+            "sk-file-secret",
+            "binding",
+            BoundAiSecret.CurrentConfigVersion,
+            config.CanonicalEndpoint,
+            config.Model);
         try
         {
             var store = new DpapiSecretStore(path);
 
-            await store.SaveAsync(secret, TestContext.Current.CancellationToken);
+            await store.SaveBoundAsync(secret, TestContext.Current.CancellationToken);
 
             Assert.DoesNotContain(
-                secret,
+                secret.ApiKey,
                 await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken),
                 StringComparison.Ordinal);
-            Assert.Equal(secret, await store.LoadAsync(TestContext.Current.CancellationToken));
+            Assert.Equal(secret, await store.LoadBoundAsync(TestContext.Current.CancellationToken));
             await store.DeleteAsync(TestContext.Current.CancellationToken);
-            Assert.Null(await store.LoadAsync(TestContext.Current.CancellationToken));
+            Assert.Null(await store.LoadBoundAsync(TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -61,8 +69,46 @@ public sealed class DpapiSecretStoreTests
         cancellation.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => store.SaveAsync("sk-cancelled", cancellation.Token));
+            () => store.SaveBoundAsync(
+                new BoundAiSecret(
+                    "sk-cancelled",
+                    "binding",
+                    1,
+                    "https://example.com/v1/chat/completions",
+                    "model"),
+                cancellation.Token));
 
         Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task SaveBoundAsync_外层不泄露密钥或端点且绑定往返()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"honey-bound-{Guid.NewGuid():N}");
+        var path = Path.Combine(directory, "secrets.json");
+        var secret = new BoundAiSecret(
+            "sk-bound-secret",
+            "binding-id",
+            BoundAiSecret.CurrentConfigVersion,
+            "https://private.example/v1/chat/completions",
+            "private-model");
+        try
+        {
+            var store = new DpapiSecretStore(path);
+            await store.SaveBoundAsync(secret, TestContext.Current.CancellationToken);
+            var file = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+
+            Assert.DoesNotContain(secret.ApiKey, file, StringComparison.Ordinal);
+            Assert.DoesNotContain(secret.CanonicalEndpoint, file, StringComparison.Ordinal);
+            Assert.DoesNotContain(secret.Model, file, StringComparison.Ordinal);
+            Assert.Equal(secret, await store.LoadBoundAsync(TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
 }

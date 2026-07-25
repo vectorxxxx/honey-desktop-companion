@@ -11,6 +11,7 @@ using Honey.Integrations.Security;
 using Honey.Persistence;
 using System.Diagnostics;
 using System.Net.Http;
+using System.Net;
 using System.Windows.Interop;
 using Microsoft.Win32;
 
@@ -27,11 +28,12 @@ public partial class App : System.Windows.Application
     private AutoStartService? _autoStart;
     private SettingsApplicationCoordinator? _settingsCoordinator;
     private DpapiSecretStore? _secretStore;
-    private string? _aiApiKey;
+    private BoundAiSecret? _aiSecret;
     private HttpClient? _aiHttpClient;
     private AiCompanionCoordinator? _aiCoordinator;
     private AiRequestGate? _aiRequestGate;
     private AiConnectionTester? _aiConnectionTester;
+    private readonly AiOperationCoordinator _aiOperations = new();
     private FocusModeService? _focusMode;
     private SqlitePetStateStore? _petStateStore;
     private IPetRuntimeLifecycle? _runtimeLifecycle;
@@ -63,13 +65,20 @@ public partial class App : System.Windows.Application
         _secretStore = new DpapiSecretStore();
         try
         {
-            _aiApiKey = await _secretStore.LoadAsync(CancellationToken.None);
+            _aiSecret = await _secretStore.LoadBoundAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
             Trace.TraceError("AI 密钥读取失败，保持 AI 本地降级：{0}", exception);
         }
-        _aiHttpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        _aiHttpClient = new HttpClient(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+        })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
         _aiRequestGate = new AiRequestGate();
         _aiConnectionTester = new AiConnectionTester(_aiRequestGate);
         _aiCoordinator = new AiCompanionCoordinator(CreateAiProvider, _aiRequestGate);
@@ -185,7 +194,7 @@ public partial class App : System.Windows.Application
         _aiRequestGate = null;
         _aiHttpClient?.Dispose();
         _aiHttpClient = null;
-        _aiApiKey = null;
+        _aiSecret = null;
         _trayIcon?.Dispose();
         _trayIcon = null;
         _showCommandDispatcher = null;
@@ -254,9 +263,15 @@ public partial class App : System.Windows.Application
 
         _settingsWindow = new SettingsWindow(
             _settings,
-            !string.IsNullOrWhiteSpace(_aiApiKey),
+            _aiSecret is not null,
+            AiConfigurationResolver.Resolve(
+                true,
+                _settings.AiEndpoint,
+                _settings.AiModel,
+                _settings.AiSecretBindingId,
+                _aiSecret).Available,
             ApplyAiSettingsAsync,
-            TestAiConnectionAsync)
+            TestAiConnectionTrackedAsync)
         {
             Owner = _overlayWindow?.IsVisible == true ? _overlayWindow : null
         };
@@ -331,10 +346,11 @@ public partial class App : System.Windows.Application
         var coordinator = new AiSettingsSaveCoordinator(
             _secretStore,
             ApplySettingsAsync);
-        _aiApiKey = await coordinator.ApplyAsync(
-            _aiApiKey,
+        var result = await coordinator.ApplyAsync(
+            _aiSecret,
             submission,
             cancellationToken);
+        _aiSecret = result.Secret;
     }
 
     private async Task<string> TestAiConnectionAsync(
@@ -342,12 +358,6 @@ public partial class App : System.Windows.Application
         string? enteredKey,
         CancellationToken cancellationToken)
     {
-        var key = string.IsNullOrWhiteSpace(enteredKey) ? _aiApiKey : enteredKey;
-        if (string.IsNullOrWhiteSpace(key))
-        {
-            return "测试失败：请先填写或保存 API 密钥。";
-        }
-
         try
         {
             if (_aiHttpClient is null || _aiConnectionTester is null)
@@ -355,13 +365,37 @@ public partial class App : System.Windows.Application
                 return "测试失败：AI 网络组件尚未初始化。";
             }
 
-            var provider = new OpenAiCompatibleProvider(
-                _aiHttpClient,
-                new AiOptions(
+            var validated = AiEndpointValidator.StrictValidate(
+                settings.AiEndpoint,
+                settings.AiModel);
+            AiOptions options;
+            if (!string.IsNullOrWhiteSpace(enteredKey))
+            {
+                options = new AiOptions(
+                    validated.CanonicalEndpoint,
+                    validated.Model,
+                    enteredKey,
+                    AiOptions.DefaultTimeout);
+            }
+            else
+            {
+                var resolved = AiConfigurationResolver.Resolve(
+                    true,
                     settings.AiEndpoint,
                     settings.AiModel,
-                    key,
-                    AiOptions.DefaultTimeout));
+                    settings.AiSecretBindingId,
+                    _aiSecret);
+                if (!resolved.Available)
+                {
+                    return resolved.FailureCode == "binding_mismatch"
+                        ? "密钥与配置不匹配，请重新保存。"
+                        : "测试失败：请先填写或保存 API 密钥。";
+                }
+
+                options = resolved.Options!;
+            }
+
+            var provider = new OpenAiCompatibleProvider(_aiHttpClient, options);
             var result = await _aiConnectionTester.TestAsync(
                 provider,
                 new AiCompanionRequest(
@@ -378,6 +412,14 @@ public partial class App : System.Windows.Application
             return $"配置无效：{exception.Message}";
         }
     }
+
+    private Task<string> TestAiConnectionTrackedAsync(
+        AppSettings settings,
+        string? enteredKey,
+        CancellationToken cancellationToken) =>
+        _aiOperations.RunAsync(
+            token => TestAiConnectionAsync(settings, enteredKey, token),
+            cancellationToken);
 
     private async Task SaveSettingsSafelyAsync()
     {
@@ -407,12 +449,13 @@ public partial class App : System.Windows.Application
 
     private void OnAiInsightRequested()
     {
-        _ = RequestAiInsightAsync();
+        _ = _aiOperations.RunAsync(RequestAiInsightAsync);
     }
 
-    private async Task RequestAiInsightAsync()
+    private async Task RequestAiInsightAsync(CancellationToken cancellationToken)
     {
-        if (_overlayWindow is null || _aiCoordinator is null)
+        var overlay = _overlayWindow;
+        if (overlay is null || _aiCoordinator is null || IsShuttingDown())
         {
             return;
         }
@@ -420,47 +463,62 @@ public partial class App : System.Windows.Application
         var result = await _aiCoordinator.RequestAsync(
             new AiCompanionRequest(
                 "请结合你现在的状态，给我一句简短灵感并建议一个可选动作。",
-                _overlayWindow.CreateAiStateSummary(),
+                overlay.CreateAiStateSummary(),
                 []),
             intent =>
             {
-                var accepted = _overlayWindow.RuntimeCommands.TryRequestAiSkill(
+                if (IsShuttingDown() || !ReferenceEquals(_overlayWindow, overlay))
+                {
+                    return;
+                }
+
+                var accepted = overlay.RuntimeCommands.TryRequestAiSkill(
                     new Honey.Domain.Behavior.BehaviorKey(intent));
                 if (!accepted)
                 {
                     Trace.TraceInformation("AI 建议因技能冷却或运行状态被忽略。");
                 }
             },
-            CancellationToken.None);
-        _overlayWindow.ShowThought(
-            result.Available
-                ? result.Text ?? "小玉安静地陪在你身边。"
-                : FailureMessage(result.FailureCode));
+            cancellationToken);
+        if (IsShuttingDown()
+            || !ReferenceEquals(_overlayWindow, overlay)
+            || Dispatcher.HasShutdownStarted
+            || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (!IsShuttingDown() && ReferenceEquals(_overlayWindow, overlay))
+            {
+                overlay.ShowThought(
+                    result.Available
+                        ? result.Text ?? "小玉安静地陪在你身边。"
+                        : FailureMessage(result.FailureCode));
+            }
+        });
     }
 
     private IAiCompanionProvider? CreateAiProvider()
     {
-        if (!_settings.AiEnabled
-            || string.IsNullOrWhiteSpace(_aiApiKey)
-            || _aiHttpClient is null)
+        if (_aiHttpClient is null)
         {
             return null;
         }
 
-        try
-        {
-            return new OpenAiCompatibleProvider(
-                _aiHttpClient,
-                new AiOptions(
-                    _settings.AiEndpoint,
-                    _settings.AiModel,
-                    _aiApiKey,
-                    AiOptions.DefaultTimeout));
-        }
-        catch (ArgumentException)
+        var resolved = AiConfigurationResolver.Resolve(
+            _settings.AiEnabled,
+            _settings.AiEndpoint,
+            _settings.AiModel,
+            _settings.AiSecretBindingId,
+            _aiSecret);
+        if (!resolved.Available)
         {
             return null;
         }
+
+        return new OpenAiCompatibleProvider(_aiHttpClient, resolved.Options!);
     }
 
     private static string FailureMessage(string? code) => code switch
@@ -501,6 +559,16 @@ public partial class App : System.Windows.Application
 
     private async Task PrepareShutdownCoreAsync()
     {
+        try
+        {
+            await _aiOperations.StopAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+            when (!ShutdownExceptionPolicy.IsFatal(exception))
+        {
+            ReportShutdownError(exception);
+        }
+
         var saveTimer = Interlocked.Exchange(ref _saveTimer, null);
         if (saveTimer is not null)
         {

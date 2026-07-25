@@ -13,7 +13,6 @@ public sealed class OpenAiCompatibleProvider : IAiCompanionProvider
     private const int MaximumRequestTextLength = 8_000;
     private const int MaximumResponseBytes = 64 * 1024;
     private const int MaximumResponseTextLength = 800;
-    private const int MaximumModelLength = 200;
     private static readonly HashSet<string> AllowedIntents =
         new(StringComparer.Ordinal)
         {
@@ -30,8 +29,11 @@ public sealed class OpenAiCompatibleProvider : IAiCompanionProvider
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         ArgumentNullException.ThrowIfNull(options);
-        _endpoint = NormalizeEndpoint(options.BaseEndpoint);
-        _model = NormalizeModel(options.Model);
+        var validated = AiEndpointValidator.StrictValidate(
+            options.BaseEndpoint,
+            options.Model);
+        _endpoint = validated.ChatCompletionsEndpoint;
+        _model = validated.Model;
         _apiKey = string.IsNullOrWhiteSpace(options.ApiKey)
             ? throw new ArgumentException("API 密钥不能为空。", nameof(options))
             : options.ApiKey.Trim();
@@ -221,47 +223,6 @@ public sealed class OpenAiCompatibleProvider : IAiCompanionProvider
         }
     }
 
-    private static Uri NormalizeEndpoint(string endpoint)
-    {
-        if (!Uri.TryCreate(endpoint?.Trim(), UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
-            || !string.IsNullOrEmpty(uri.UserInfo)
-            || !string.IsNullOrEmpty(uri.Query)
-            || !string.IsNullOrEmpty(uri.Fragment))
-        {
-            throw new ArgumentException("AI 服务地址无效。", nameof(endpoint));
-        }
-
-        if (uri.Scheme == Uri.UriSchemeHttp && !IsLoopback(uri))
-        {
-            throw new ArgumentException("仅本机兼容服务可使用明文 HTTP。", nameof(endpoint));
-        }
-
-        var path = uri.AbsolutePath.TrimEnd('/');
-        if (!path.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-        {
-            path = $"{path}/chat/completions";
-        }
-
-        return new UriBuilder(uri) { Path = path }.Uri;
-    }
-
-    private static bool IsLoopback(Uri uri) =>
-        uri.IsLoopback
-        || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
-        || (IPAddress.TryParse(uri.Host, out var address) && IPAddress.IsLoopback(address));
-
-    private static string NormalizeModel(string model)
-    {
-        var normalized = model?.Trim();
-        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length > MaximumModelLength)
-        {
-            throw new ArgumentException("模型名称不能为空且不得超过 200 个字符。", nameof(model));
-        }
-
-        return normalized;
-    }
-
     private static string Limit(string? value, int maximum) =>
         string.IsNullOrEmpty(value) ? string.Empty : value[..Math.Min(value.Length, maximum)];
 
@@ -271,6 +232,7 @@ public sealed class OpenAiCompatibleProvider : IAiCompanionProvider
     private static string MapStatusCode(HttpStatusCode statusCode) =>
         statusCode switch
         {
+            >= HttpStatusCode.MultipleChoices and < HttpStatusCode.BadRequest => "redirect",
             HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "auth",
             HttpStatusCode.TooManyRequests => "rate_limited",
             >= HttpStatusCode.InternalServerError => "server_error",

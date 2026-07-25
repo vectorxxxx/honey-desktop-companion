@@ -52,4 +52,25 @@ public sealed class AiSettingsTestControllerTests
         Assert.Equal("测试已取消。", await pending);
         await cancellationObserved.Task.WaitAsync(TestContext.Current.CancellationToken);
     }
+
+    [Fact]
+    public async Task Cancel_与请求完成并发时幂等且无遗留()
+    {
+        for (var index = 0; index < 200; index++)
+        {
+            var controller = new AiSettingsTestController();
+            var completion = new TaskCompletionSource<string>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            var pending = controller.RunAsync(_ => completion.Task, TestContext.Current.CancellationToken);
+
+            await Task.WhenAll(
+                Task.Run(controller.Cancel, TestContext.Current.CancellationToken),
+                Task.Run(
+                    () => completion.TrySetResult("完成"),
+                    TestContext.Current.CancellationToken));
+            controller.Cancel();
+            await pending;
+            Assert.False(controller.IsRunning);
+        }
+    }
 }

@@ -1,50 +1,85 @@
+using Honey.Integrations.Ai;
 using Honey.Integrations.Security;
 
 namespace Honey.Desktop.Settings;
+
+public sealed record AiSettingsSaveResult(
+    AppSettings Settings,
+    BoundAiSecret? Secret);
 
 public sealed class AiSettingsSaveCoordinator(
     IAiSecretStore secretStore,
     Func<AppSettings, CancellationToken, Task> saveSettings)
 {
-    public async Task<string?> ApplyAsync(
-        string? currentApiKey,
+    public async Task<AiSettingsSaveResult> ApplyAsync(
+        BoundAiSecret? currentSecret,
         AiSettingsSubmission submission,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(submission);
-        var nextKey = currentApiKey;
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(submission.NewApiKey))
-            {
-                await secretStore.SaveAsync(submission.NewApiKey, cancellationToken);
-                nextKey = submission.NewApiKey;
-            }
-            else if (submission.ClearApiKey)
-            {
-                await secretStore.DeleteAsync(cancellationToken);
-                nextKey = null;
-            }
+        var requested = submission.Settings;
 
-            if (submission.Settings.AiEnabled && string.IsNullOrWhiteSpace(nextKey))
+        if (submission.ClearApiKey && string.IsNullOrWhiteSpace(submission.NewApiKey))
+        {
+            var disabled = requested.Normalize() with
+            {
+                AiEnabled = false,
+                AiSecretBindingId = null
+            };
+            await saveSettings(disabled, cancellationToken);
+            await secretStore.DeleteAsync(cancellationToken);
+            return new AiSettingsSaveResult(disabled, null);
+        }
+
+        var apiKey = string.IsNullOrWhiteSpace(submission.NewApiKey)
+            ? currentSecret?.ApiKey
+            : submission.NewApiKey.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            if (requested.AiEnabled)
             {
                 throw new InvalidOperationException("启用 AI 前必须安全保存 API 密钥。");
             }
 
-            await saveSettings(submission.Settings, cancellationToken);
-            return nextKey;
+            var withoutSecret = requested.Normalize() with { AiSecretBindingId = null };
+            await saveSettings(withoutSecret, cancellationToken);
+            return new AiSettingsSaveResult(withoutSecret, null);
+        }
+
+        var validated = AiEndpointValidator.StrictValidate(
+            requested.AiEndpoint,
+            requested.AiModel);
+        var bindingId = Guid.NewGuid().ToString("N");
+        var nextSecret = new BoundAiSecret(
+            apiKey,
+            bindingId,
+            BoundAiSecret.CurrentConfigVersion,
+            validated.CanonicalEndpoint,
+            validated.Model);
+        var nextSettings = requested.Normalize() with
+        {
+            AiEndpoint = requested.AiEndpoint.Trim().TrimEnd('/'),
+            AiModel = validated.Model,
+            AiSecretBindingId = bindingId
+        };
+
+        await secretStore.SaveBoundAsync(nextSecret, cancellationToken);
+        try
+        {
+            await saveSettings(nextSettings, cancellationToken);
+            return new AiSettingsSaveResult(nextSettings, nextSecret);
         }
         catch (Exception original)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(currentApiKey))
+                if (currentSecret is null)
                 {
                     await secretStore.DeleteAsync(CancellationToken.None);
                 }
                 else
                 {
-                    await secretStore.SaveAsync(currentApiKey, CancellationToken.None);
+                    await secretStore.SaveBoundAsync(currentSecret, CancellationToken.None);
                 }
             }
             catch (Exception compensation)
