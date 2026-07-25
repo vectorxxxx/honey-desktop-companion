@@ -1,14 +1,27 @@
 using SkiaSharp;
+using Honey.Domain.Behavior;
 
 namespace Honey.Rendering.Effects;
 
-public sealed class WebScene
+public sealed class WebScene : IDisposable
 {
+    private readonly SKPaint _paint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeCap = SKStrokeCap.Round
+    };
+    private int _disposed;
+
     public void Draw(SKCanvas canvas, SKRect bounds, RenderSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(canvas);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         var safe = snapshot.Normalize();
-        if (!string.Equals(safe.Behavior, "web", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(
+                safe.Behavior,
+                BuiltInBehaviorKeys.Web,
+                StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -16,14 +29,8 @@ public sealed class WebScene
         var color = safe.Mode == Domain.Model.PetMode.Berserk
             ? new SKColor(230, 68, 64, 100)
             : new SKColor(184, 248, 239, 105);
-        using var paint = new SKPaint
-        {
-            Color = color,
-            IsAntialias = true,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = Math.Max(1, bounds.Width * 0.005f),
-            StrokeCap = SKStrokeCap.Round
-        };
+        _paint.Color = color;
+        _paint.StrokeWidth = Math.Max(1, bounds.Width * 0.005f);
         using var builder = new SKPathBuilder();
         var left = bounds.Left + bounds.Width * 0.12f;
         var right = bounds.Right - bounds.Width * 0.12f;
@@ -46,6 +53,14 @@ public sealed class WebScene
             right - bounds.Width * 0.05f,
             top + bounds.Height * 0.28f);
         using var path = builder.Detach();
-        canvas.DrawPath(path, paint);
+        canvas.DrawPath(path, _paint);
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _paint.Dispose();
+        }
     }
 }

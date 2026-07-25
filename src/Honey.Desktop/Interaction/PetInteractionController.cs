@@ -9,6 +9,7 @@ public sealed class PetInteractionController
     private readonly Action<PetInteractionOccurred> _interactionOccurred;
     private readonly Action<PixelPoint> _moveWindow;
     private readonly Action<bool> _autonomousMovementPaused;
+    private readonly Action<Exception>? _errorSink;
     private readonly int _dragThresholdPixels;
     private PixelPoint _pointerOrigin;
     private PixelPoint _windowOrigin;
@@ -20,6 +21,7 @@ public sealed class PetInteractionController
         Action<PetInteractionOccurred> interactionOccurred,
         Action<PixelPoint> moveWindow,
         Action<bool>? autonomousMovementPaused = null,
+        Action<Exception>? errorSink = null,
         int dragThresholdPixels = 6)
     {
         if (petId == Guid.Empty)
@@ -31,6 +33,7 @@ public sealed class PetInteractionController
         _interactionOccurred = interactionOccurred ?? throw new ArgumentNullException(nameof(interactionOccurred));
         _moveWindow = moveWindow ?? throw new ArgumentNullException(nameof(moveWindow));
         _autonomousMovementPaused = autonomousMovementPaused ?? (_ => { });
+        _errorSink = errorSink;
         _dragThresholdPixels = Math.Max(1, dragThresholdPixels);
     }
 
@@ -38,6 +41,11 @@ public sealed class PetInteractionController
 
     public void Begin(PixelPoint pointerScreen, PixelPoint windowOrigin)
     {
+        if (_pressed || IsDragging)
+        {
+            Cancel();
+        }
+
         _pointerOrigin = pointerScreen;
         _windowOrigin = windowOrigin;
         _pressed = true;
@@ -58,7 +66,7 @@ public sealed class PetInteractionController
             && (Math.Abs(deltaX) > _dragThresholdPixels || Math.Abs(deltaY) > _dragThresholdPixels))
         {
             IsDragging = true;
-            _autonomousMovementPaused(true);
+            SafeCallback.Invoke(() => _autonomousMovementPaused(true), _errorSink);
         }
 
         if (IsDragging)
@@ -67,7 +75,7 @@ public sealed class PetInteractionController
             if (_lastWindowPosition != next)
             {
                 _lastWindowPosition = next;
-                _moveWindow(next);
+                SafeCallback.Invoke(() => _moveWindow(next), _errorSink);
             }
         }
     }
@@ -79,25 +87,40 @@ public sealed class PetInteractionController
             return;
         }
 
-        Move(pointerScreen);
-        _pressed = false;
-        if (IsDragging)
+        var wasDragging = IsDragging;
+        try
         {
-            IsDragging = false;
-            _autonomousMovementPaused(false);
-            return;
+            Move(pointerScreen);
+            wasDragging = IsDragging;
+            if (!wasDragging)
+            {
+                SafeCallback.Invoke(
+                    () => _interactionOccurred(new PetInteractionOccurred(_petId, "pet")),
+                    _errorSink);
+            }
         }
-
-        _interactionOccurred(new PetInteractionOccurred(_petId, "pet"));
+        finally
+        {
+            _pressed = false;
+            var releasePause = IsDragging;
+            IsDragging = false;
+            if (releasePause)
+            {
+                SafeCallback.Invoke(() => _autonomousMovementPaused(false), _errorSink);
+            }
+        }
     }
 
-    public void Cancel()
+    public bool Cancel()
     {
         _pressed = false;
-        if (IsDragging)
+        var wasDragging = IsDragging;
+        IsDragging = false;
+        if (wasDragging)
         {
-            IsDragging = false;
-            _autonomousMovementPaused(false);
+            SafeCallback.Invoke(() => _autonomousMovementPaused(false), _errorSink);
         }
+
+        return wasDragging;
     }
 }

@@ -9,7 +9,8 @@ public sealed record SpiderPose(
     SKPoint Center,
     SKRect Abdomen,
     SKRect Head,
-    IReadOnlyList<SpiderLeg> Legs);
+    IReadOnlyList<SpiderLeg> Legs,
+    SKRect ContentBounds);
 
 public static class SpiderGeometry
 {
@@ -45,6 +46,41 @@ public static class SpiderGeometry
             layout.Center,
             layout.Abdomen,
             layout.Head,
-            Array.AsReadOnly(legs));
+            legs,
+            CalculateContentBounds(layout.Abdomen, layout.Head, legs));
+    }
+
+    private static SKRect CalculateContentBounds(
+        SKRect abdomen,
+        SKRect head,
+        IReadOnlyList<SpiderLeg> legs)
+    {
+        var left = Math.Min(abdomen.Left, head.Left);
+        var top = Math.Min(abdomen.Top, head.Top);
+        var right = Math.Max(abdomen.Right, head.Right);
+        var bottom = Math.Max(abdomen.Bottom, head.Bottom);
+        foreach (var leg in legs)
+        {
+            var radius = leg.Width * 1.18f / 2;
+            Include(leg.Root, radius, ref left, ref top, ref right, ref bottom);
+            Include(leg.Knee, radius, ref left, ref top, ref right, ref bottom);
+            Include(leg.Tip, radius, ref left, ref top, ref right, ref bottom);
+        }
+
+        return new SKRect(left, top, right, bottom);
+    }
+
+    private static void Include(
+        SKPoint point,
+        float radius,
+        ref float left,
+        ref float top,
+        ref float right,
+        ref float bottom)
+    {
+        left = Math.Min(left, point.X - radius);
+        top = Math.Min(top, point.Y - radius);
+        right = Math.Max(right, point.X + radius);
+        bottom = Math.Max(bottom, point.Y + radius);
     }
 }

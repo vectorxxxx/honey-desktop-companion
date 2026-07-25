@@ -79,14 +79,16 @@
                     </Canvas>
                 </Viewbox>
             </Button>
-            <Button Canvas.Left="196" Canvas.Top="66"
+            <Button x:Name="PauseMenuButton"
+                    Canvas.Left="196" Canvas.Top="66"
                     Style="{StaticResource RadialButtonStyle}"
                     ToolTip="暂停或恢复"
                     AutomationProperties.Name="暂停或恢复自主行动"
                     Click="OnPauseButtonClick">
                 <Viewbox Width="22" Height="22">
                     <Canvas Width="24" Height="24">
-                        <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                        <Path x:Name="PauseIconPath"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                               Data="M9,5 L9,19 M15,5 L15,19" />
                     </Canvas>

@@ -14,7 +14,7 @@ public sealed record SpiderLayout(
     {
         var safeScale = float.IsFinite(scale) && scale > 0 ? Math.Clamp(scale, 0.4f, 2f) : 1;
         var center = new SKPoint(width / 2, height / 2);
-        var unit = MathF.Min(width, height) * 0.19f * safeScale;
+        var unit = SpiderViewportMetrics.CanonicalUnit * safeScale;
         var abdomen = SKRect.Create(
             center.X - unit * 0.58f,
             center.Y - unit * 0.72f,

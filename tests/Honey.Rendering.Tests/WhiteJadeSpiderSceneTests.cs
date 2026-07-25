@@ -9,7 +9,7 @@ public sealed class WhiteJadeSpiderSceneTests
     [Fact]
     public void Draw_普通与狂暴有明显像素差异且四角透明()
     {
-        var scene = new WhiteJadeSpiderScene();
+        using var scene = new WhiteJadeSpiderScene();
         using var normal = Render(scene, Snapshot(PetMode.Normal));
         using var berserk = Render(scene, Snapshot(PetMode.Berserk));
 
@@ -25,7 +25,7 @@ public sealed class WhiteJadeSpiderSceneTests
     [Fact]
     public void Draw_相同快照产生确定输出而时间变化会改变步态()
     {
-        var scene = new WhiteJadeSpiderScene();
+        using var scene = new WhiteJadeSpiderScene();
         using var first = Render(scene, Snapshot(PetMode.Normal, 1.25));
         using var second = Render(scene, Snapshot(PetMode.Normal, 1.25));
         using var later = Render(scene, Snapshot(PetMode.Normal, 1.75));
@@ -37,7 +37,7 @@ public sealed class WhiteJadeSpiderSceneTests
     [Fact]
     public void Draw_非法快照数值不会抛出()
     {
-        var scene = new WhiteJadeSpiderScene();
+        using var scene = new WhiteJadeSpiderScene();
         var snapshot = new RenderSnapshot(
             PetMode.Normal,
             PetMood.Curious,
@@ -74,7 +74,7 @@ public sealed class WhiteJadeSpiderSceneTests
     [Fact]
     public void Draw_默认路径与显式共享姿态产生相同像素()
     {
-        var scene = new WhiteJadeSpiderScene();
+        using var scene = new WhiteJadeSpiderScene();
         var snapshot = Snapshot(PetMode.Normal, 1.375) with { Mood = PetMood.Alert };
         var pose = SpiderGeometry.CreatePose(256, 256, snapshot);
         using var automatic = Render(scene, snapshot);

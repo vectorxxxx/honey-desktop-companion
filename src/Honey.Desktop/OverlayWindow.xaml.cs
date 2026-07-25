@@ -2,11 +2,14 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Honey.Content.WhiteJadeSpider;
 using Honey.Desktop.Interaction;
+using Honey.Desktop.Rendering;
+using Honey.Domain.Behavior;
 using Honey.Domain.Events;
 using Honey.Domain.Model;
 using Honey.Integrations.Windows;
@@ -26,17 +29,19 @@ public partial class OverlayWindow : Window
     private readonly DisplayBoundsService _displayBounds;
     private readonly OverlayHitTestPolicy _hitTestPolicy;
     private readonly WhiteJadeSpiderScene _scene = new();
-    private readonly Stopwatch _animationClock = Stopwatch.StartNew();
+    private readonly PausableAnimationClock _animationClock = new();
+    private readonly PauseCoordinator _pauseCoordinator;
     private readonly PetInteractionController _interactionController;
+    private readonly PointerInteractionFinalizer _interactionFinalizer;
     private readonly Guid _petId;
     private RenderSnapshot _snapshot;
     private SpiderHitMap _hitMap = SpiderHitMap.CreateDefault(0, 0, 1);
     private float _canvasCoordinateWidth;
     private float _canvasCoordinateHeight;
     private bool _menuOpen;
-    private bool _paused;
-    private double _frozenAnimationTime;
+    private bool _userPaused;
     private bool _allowClose;
+    private int _disposed;
 
     public OverlayWindow(
         DisplayBoundsService displayBounds,
@@ -53,12 +58,17 @@ public partial class OverlayWindow : Window
             0,
             0,
             (float)initial.Scale,
-            "observe").Normalize();
+            BuiltInBehaviorKeys.Observe).Normalize();
+        _pauseCoordinator = new PauseCoordinator(
+            paused => AutonomousMovementPaused?.Invoke(paused),
+            ReportInputError);
         _interactionController = new PetInteractionController(
             initial.PetId,
             interaction => InteractionOccurred?.Invoke(interaction),
             MoveWindowPhysical,
-            paused => AutonomousMovementPaused?.Invoke(paused));
+            paused => _pauseCoordinator.Set(PauseReason.Drag, paused),
+            ReportInputError);
+        _interactionFinalizer = new PointerInteractionFinalizer(_interactionController);
 
         InitializeComponent();
         SourceInitialized += OnSourceInitialized;
@@ -72,6 +82,7 @@ public partial class OverlayWindow : Window
         MouseLeftButtonUp += OnMouseLeftButtonUp;
         MouseRightButtonUp += OnMouseRightButtonUp;
         LostMouseCapture += OnLostMouseCapture;
+        Deactivated += OnDeactivated;
         PreviewKeyDown += OnPreviewKeyDown;
         _hitTestPolicy.Update(HitTestPhysicalPoint);
     }
@@ -85,7 +96,17 @@ public partial class OverlayWindow : Window
     public RenderSnapshot Snapshot
     {
         get => Volatile.Read(ref _snapshot);
-        set => Volatile.Write(ref _snapshot, (value ?? throw new ArgumentNullException(nameof(value))).Normalize());
+        set
+        {
+            var normalized =
+                (value ?? throw new ArgumentNullException(nameof(value))).Normalize();
+            var previous = Volatile.Read(ref _snapshot);
+            Volatile.Write(ref _snapshot, normalized);
+            if (Math.Abs(previous.Scale - normalized.Scale) > float.Epsilon)
+            {
+                ResizeForScale(normalized.Scale);
+            }
+        }
     }
 
     public void PlaceAtPrimaryBottomRight()
@@ -136,6 +157,7 @@ public partial class OverlayWindow : Window
 
     public void CloseForExit()
     {
+        FinalizePointerInteraction(null, complete: false);
         _allowClose = true;
         Close();
     }
@@ -146,15 +168,13 @@ public partial class OverlayWindow : Window
         canvas.Clear(SKColors.Transparent);
         _canvasCoordinateWidth = e.Info.Width;
         _canvasCoordinateHeight = e.Info.Height;
-        var current = Snapshot with
-        {
-            AnimationTime = _paused ? _frozenAnimationTime : _animationClock.Elapsed.TotalSeconds
-        };
-        _hitMap = SpiderHitMap.CreateForSnapshot(
+        var current = Snapshot with { AnimationTime = _animationClock.Elapsed.TotalSeconds };
+        var pose = SpiderGeometry.CreatePose(
             _canvasCoordinateWidth,
             _canvasCoordinateHeight,
             current);
-        _scene.Draw(canvas, current, _canvasCoordinateWidth, _canvasCoordinateHeight);
+        _hitMap = SpiderHitMap.Create(pose);
+        _scene.Draw(canvas, current, pose);
     }
 
     private void OnRendering(object? sender, EventArgs e)
@@ -164,20 +184,44 @@ public partial class OverlayWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        ResizeForScale(Snapshot.Scale);
+        UpdatePauseButtonVisual();
+        UpdateVisibilityPause();
         UpdateRenderingSubscription();
         SpiderCanvas.InvalidateVisual();
     }
 
-    private void OnVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) =>
-        UpdateRenderingSubscription();
+    private void OnVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UpdateVisibilityPause();
+        if (!IsVisible)
+        {
+            FinalizePointerInteraction(null, complete: false);
+        }
 
-    private void OnWindowStateChanged(object? sender, EventArgs e) =>
         UpdateRenderingSubscription();
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        UpdateVisibilityPause();
+        if (WindowState == WindowState.Minimized)
+        {
+            FinalizePointerInteraction(null, complete: false);
+        }
+
+        UpdateRenderingSubscription();
+    }
+
+    private void UpdateVisibilityPause() =>
+        _animationClock.SetPaused(
+            AnimationPauseReason.Hidden,
+            !IsVisible || WindowState == WindowState.Minimized);
 
     private void UpdateRenderingSubscription()
     {
         CompositionTarget.Rendering -= OnRendering;
-        if (IsVisible && WindowState != WindowState.Minimized && !_paused)
+        if (IsVisible && WindowState != WindowState.Minimized && !_userPaused)
         {
             CompositionTarget.Rendering += OnRendering;
         }
@@ -186,7 +230,11 @@ public partial class OverlayWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         CompositionTarget.Rendering -= OnRendering;
-        _interactionController.Cancel();
+        FinalizePointerInteraction(null, complete: false);
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _scene.Dispose();
+        }
     }
 
     private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
@@ -231,18 +279,17 @@ public partial class OverlayWindow : Window
         }
 
         var screen = PointToScreen(e.GetPosition(this));
-        _interactionController.End(new PixelPoint((int)Math.Round(screen.X), (int)Math.Round(screen.Y)));
-        Mouse.Capture(null);
-        if (!_interactionController.IsDragging)
-        {
-            RestoreToVisibleWorkArea();
-        }
-
+        FinalizePointerInteraction(
+            new PixelPoint((int)Math.Round(screen.X), (int)Math.Round(screen.Y)),
+            complete: true);
         e.Handled = true;
     }
 
     private void OnLostMouseCapture(object sender, System.Windows.Input.MouseEventArgs e) =>
-        _interactionController.Cancel();
+        FinalizePointerInteraction(null, complete: false);
+
+    private void OnDeactivated(object? sender, EventArgs e) =>
+        FinalizePointerInteraction(null, complete: false);
 
     private void OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
@@ -253,21 +300,20 @@ public partial class OverlayWindow : Window
     private void OnPetButtonClick(object sender, RoutedEventArgs e)
     {
         Snapshot = Snapshot with { Mood = PetMood.Happy };
-        InteractionOccurred?.Invoke(new PetInteractionOccurred(_petId, "pet"));
+        SafeCallback.Invoke(
+            () => InteractionOccurred?.Invoke(new PetInteractionOccurred(_petId, "pet")),
+            ReportInputError);
         SetMenuOpen(false);
     }
 
     private void OnPauseButtonClick(object sender, RoutedEventArgs e)
     {
-        if (!_paused)
-        {
-            _frozenAnimationTime = _animationClock.Elapsed.TotalSeconds;
-        }
-
-        _paused = !_paused;
-        AutonomousMovementPaused?.Invoke(_paused);
+        _userPaused = !_userPaused;
+        _pauseCoordinator.Set(PauseReason.User, _userPaused);
+        _animationClock.SetPaused(AnimationPauseReason.User, _userPaused);
+        UpdatePauseButtonVisual();
         UpdateRenderingSubscription();
-        if (!_paused)
+        if (!_userPaused)
         {
             SpiderCanvas.InvalidateVisual();
         }
@@ -277,7 +323,11 @@ public partial class OverlayWindow : Window
 
     private void OnSleepButtonClick(object sender, RoutedEventArgs e)
     {
-        Snapshot = Snapshot with { Mood = PetMood.Sleepy, Behavior = "sleep" };
+        Snapshot = Snapshot with
+        {
+            Mood = PetMood.Sleepy,
+            Behavior = BuiltInBehaviorKeys.Sleep
+        };
         SetMenuOpen(false);
     }
 
@@ -313,6 +363,83 @@ public partial class OverlayWindow : Window
             PetMenuButton.Focus();
         }
     }
+
+    private void UpdatePauseButtonVisual()
+    {
+        var tooltip = _userPaused ? "恢复自主行动" : "暂停自主行动";
+        PauseMenuButton.ToolTip = tooltip;
+        AutomationProperties.SetName(PauseMenuButton, tooltip);
+        PauseIconPath.Data = Geometry.Parse(
+            _userPaused
+                ? "M6,4 L20,12 L6,20 Z"
+                : "M9,5 L9,19 M15,5 L15,19");
+    }
+
+    private void FinalizePointerInteraction(PixelPoint? pointer, bool complete)
+    {
+        var wasDragging = _interactionController.IsDragging;
+        try
+        {
+            if (complete && pointer is { } finalPoint)
+            {
+                wasDragging |= _interactionFinalizer.Complete(finalPoint);
+            }
+            else
+            {
+                wasDragging |= _interactionFinalizer.Cancel();
+            }
+        }
+        finally
+        {
+            if (Mouse.Captured == this)
+            {
+                Mouse.Capture(null);
+            }
+
+            if (wasDragging)
+            {
+                RestoreToVisibleWorkArea();
+            }
+        }
+    }
+
+    private void ResizeForScale(float scale)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(() => ResizeForScale(scale));
+            return;
+        }
+
+        var next = OverlaySizePolicy.Calculate(scale);
+        if (!IsLoaded)
+        {
+            Width = next.Width;
+            Height = next.Height;
+            return;
+        }
+
+        var dpi = GetDpi();
+        var origin = GetPhysicalWindowOrigin();
+        var currentSize = GetPhysicalWindowSize();
+        var current = new PixelRect(
+            origin.X,
+            origin.Y,
+            Math.Max(1, currentSize.Width),
+            Math.Max(1, currentSize.Height));
+        var centered = OverlaySizePolicy.KeepCenter(
+            current,
+            new OverlaySize(
+                next.Width * dpi.DpiScaleX,
+                next.Height * dpi.DpiScaleY));
+        Width = next.Width;
+        Height = next.Height;
+        ApplyPhysicalBounds(_displayBounds.RestoreToVisibleWorkArea(centered), dpi);
+        SpiderCanvas.InvalidateVisual();
+    }
+
+    private static void ReportInputError(Exception exception) =>
+        Trace.TraceError("桌面互动回调失败：{0}", exception);
 
     private bool HitTestPhysicalPoint(PixelPoint localPhysical)
     {
@@ -383,6 +510,7 @@ public partial class OverlayWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        FinalizePointerInteraction(null, complete: false);
         if (_allowClose)
         {
             return;
