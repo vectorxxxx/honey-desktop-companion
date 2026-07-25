@@ -150,10 +150,10 @@ public partial class OverlayWindow : Window
         {
             AnimationTime = _paused ? _frozenAnimationTime : _animationClock.Elapsed.TotalSeconds
         };
-        _hitMap = SpiderHitMap.CreateDefault(
+        _hitMap = SpiderHitMap.CreateForSnapshot(
             _canvasCoordinateWidth,
             _canvasCoordinateHeight,
-            current.Scale);
+            current);
         _scene.Draw(canvas, current, _canvasCoordinateWidth, _canvasCoordinateHeight);
     }
 

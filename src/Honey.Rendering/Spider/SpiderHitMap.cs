@@ -2,11 +2,11 @@ namespace Honey.Rendering.Spider;
 
 public sealed class SpiderHitMap
 {
-    private readonly SpiderLayout? _layout;
+    private readonly SpiderPose? _pose;
 
-    private SpiderHitMap(SpiderLayout? layout)
+    private SpiderHitMap(SpiderPose? pose)
     {
-        _layout = layout;
+        _pose = pose;
     }
 
     public static SpiderHitMap CreateDefault(float width, float height, float scale)
@@ -16,22 +16,52 @@ public sealed class SpiderHitMap
             return new SpiderHitMap(null);
         }
 
-        return new SpiderHitMap(SpiderLayout.Create(width, height, scale));
+        return CreateForSnapshot(
+            width,
+            height,
+            new RenderSnapshot(
+                Honey.Domain.Model.PetMode.Normal,
+                Honey.Domain.Model.PetMood.Curious,
+                0,
+                0,
+                0,
+                scale,
+                string.Empty));
+    }
+
+    public static SpiderHitMap CreateForSnapshot(
+        float width,
+        float height,
+        RenderSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (!float.IsFinite(width) || !float.IsFinite(height) || width <= 0 || height <= 0)
+        {
+            return new SpiderHitMap(null);
+        }
+
+        return new SpiderHitMap(SpiderGeometry.CreatePose(width, height, snapshot));
+    }
+
+    public static SpiderHitMap Create(SpiderPose pose)
+    {
+        ArgumentNullException.ThrowIfNull(pose);
+        return new SpiderHitMap(pose);
     }
 
     public bool Contains(float x, float y)
     {
-        if (_layout is null || !float.IsFinite(x) || !float.IsFinite(y))
+        if (_pose is null || !float.IsFinite(x) || !float.IsFinite(y))
         {
             return false;
         }
 
-        if (ContainsEllipse(_layout.Abdomen, x, y) || ContainsEllipse(_layout.Head, x, y))
+        if (ContainsEllipse(_pose.Abdomen, x, y) || ContainsEllipse(_pose.Head, x, y))
         {
             return true;
         }
 
-        return _layout.Legs.Any(leg =>
+        return _pose.Legs.Any(leg =>
             DistanceToSegment(x, y, leg.Root.X, leg.Root.Y, leg.Knee.X, leg.Knee.Y) <= leg.Width / 2
             || DistanceToSegment(x, y, leg.Knee.X, leg.Knee.Y, leg.Tip.X, leg.Tip.Y) <= leg.Width / 2);
     }

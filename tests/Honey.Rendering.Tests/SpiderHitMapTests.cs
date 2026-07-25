@@ -1,4 +1,5 @@
 using Honey.Rendering.Spider;
+using Honey.Domain.Model;
 
 namespace Honey.Rendering.Tests;
 
@@ -51,4 +52,50 @@ public sealed class SpiderHitMapTests
         Assert.False(invalid.Contains(float.NaN, 100));
         Assert.False(invalid.Contains(100, float.PositiveInfinity));
     }
+
+    [Fact]
+    public void CreateForSnapshot_只命中当前动画时刻的腿部姿态()
+    {
+        const float width = 240;
+        const float height = 240;
+        var firstTime = Math.PI / (2 * 3.1);
+        var laterTime = 3 * Math.PI / (2 * 3.1);
+        var first = Snapshot(PetMood.Alert, firstTime);
+        var later = Snapshot(PetMood.Alert, laterTime);
+        var firstPose = SpiderGeometry.CreatePose(width, height, first);
+        var firstKnee = firstPose.Legs[0].Knee;
+
+        Assert.True(SpiderHitMap.CreateForSnapshot(width, height, first).Contains(firstKnee.X, firstKnee.Y));
+        Assert.False(SpiderHitMap.CreateForSnapshot(width, height, later).Contains(firstKnee.X, firstKnee.Y));
+    }
+
+    [Theory]
+    [InlineData(PetMood.Happy, 0.25)]
+    [InlineData(PetMood.Curious, 0.75)]
+    [InlineData(PetMood.Hungry, 1.25)]
+    [InlineData(PetMood.Sleepy, 1.75)]
+    [InlineData(PetMood.Alert, 2.25)]
+    [InlineData(PetMood.Angry, 2.75)]
+    public void CreateForSnapshot_每条动态腿的两段中点与膝点均可命中(
+        PetMood mood,
+        double animationTime)
+    {
+        var snapshot = Snapshot(mood, animationTime);
+        var pose = SpiderGeometry.CreatePose(260, 260, snapshot);
+        var hitMap = SpiderHitMap.CreateForSnapshot(260, 260, snapshot);
+
+        foreach (var leg in pose.Legs)
+        {
+            Assert.True(hitMap.Contains(leg.Knee.X, leg.Knee.Y));
+            Assert.True(hitMap.Contains(
+                (leg.Root.X + leg.Knee.X) / 2,
+                (leg.Root.Y + leg.Knee.Y) / 2));
+            Assert.True(hitMap.Contains(
+                (leg.Knee.X + leg.Tip.X) / 2,
+                (leg.Knee.Y + leg.Tip.Y) / 2));
+        }
+    }
+
+    private static RenderSnapshot Snapshot(PetMood mood, double time) =>
+        new(PetMode.Normal, mood, 0, 0, time, 1, "observe");
 }

@@ -71,6 +71,25 @@ public sealed class WhiteJadeSpiderSceneTests
         Assert.Equal(string.Empty, normalized.Behavior);
     }
 
+    [Fact]
+    public void Draw_默认路径与显式共享姿态产生相同像素()
+    {
+        var scene = new WhiteJadeSpiderScene();
+        var snapshot = Snapshot(PetMode.Normal, 1.375) with { Mood = PetMood.Alert };
+        var pose = SpiderGeometry.CreatePose(256, 256, snapshot);
+        using var automatic = Render(scene, snapshot);
+        using var explicitPose = new SKBitmap(256, 256, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using (var canvas = new SKCanvas(explicitPose))
+        {
+            canvas.Clear(SKColors.Transparent);
+            scene.Draw(canvas, snapshot, pose);
+        }
+
+        Assert.Equal(0, CountDifferentPixels(automatic, explicitPose));
+        var hitMap = SpiderHitMap.Create(pose);
+        Assert.All(pose.Legs, leg => Assert.True(hitMap.Contains(leg.Knee.X, leg.Knee.Y)));
+    }
+
     private static RenderSnapshot Snapshot(PetMode mode, double time = 1.25) =>
         new(mode, PetMood.Curious, 0.35f, -0.2f, time, 1, "observe");
 
