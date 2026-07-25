@@ -22,12 +22,50 @@ public static class SqliteArchiveVerifier
             throw new InvalidDataException("SQLite 存档不存在。");
         }
 
+        var sourcePath = Path.GetFullPath(databasePath);
+        var temporaryDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "Honey",
+            "archive-verification",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(temporaryDirectory);
+            var snapshotPath = Path.Combine(temporaryDirectory, Path.GetFileName(sourcePath));
+            await CopySnapshotFileAsync(sourcePath, snapshotPath, cancellationToken);
+            foreach (var suffix in new[] { "-wal", "-shm" })
+            {
+                var sidecar = sourcePath + suffix;
+                if (File.Exists(sidecar))
+                {
+                    await CopySnapshotFileAsync(
+                        sidecar,
+                        snapshotPath + suffix,
+                        cancellationToken);
+                }
+            }
+
+            return await VerifySnapshotAsync(snapshotPath, cancellationToken);
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryDirectory))
+            {
+                Directory.Delete(temporaryDirectory, recursive: true);
+            }
+        }
+    }
+
+    private static async Task<SqliteArchiveVerification> VerifySnapshotAsync(
+        string snapshotPath,
+        CancellationToken cancellationToken)
+    {
         try
         {
             await using var connection = new SqliteConnection(
                 new SqliteConnectionStringBuilder
                 {
-                    DataSource = Path.GetFullPath(databasePath),
+                    DataSource = snapshotPath,
                     Mode = SqliteOpenMode.ReadOnly,
                     Pooling = false
                 }.ConnectionString);
@@ -86,6 +124,29 @@ public static class SqliteArchiveVerifier
         {
             throw new InvalidDataException("SQLite 存档无法通过完整性验证。", exception);
         }
+    }
+
+    private static async Task CopySnapshotFileAsync(
+        string source,
+        string destination,
+        CancellationToken cancellationToken)
+    {
+        await using var input = new FileStream(
+            source,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var output = new FileStream(
+            destination,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 64 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await input.CopyToAsync(output, cancellationToken);
+        await output.FlushAsync(cancellationToken);
     }
 
     private static async Task RequireOkAsync(

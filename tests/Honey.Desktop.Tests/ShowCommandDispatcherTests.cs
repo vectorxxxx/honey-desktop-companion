@@ -5,21 +5,21 @@ namespace Honey.Desktop.Tests;
 public sealed class ShowCommandDispatcherTests
 {
     [Fact]
-    public void Handle_只投递恢复动作而不等待动作执行()
+    public async Task Handle_等待恢复动作执行完毕()
     {
-        Action? queuedAction = null;
         var restored = false;
         var dispatcher = new ShowCommandDispatcher(
             isShuttingDown: () => false,
-            post: action => queuedAction = action,
+            post: action =>
+            {
+                action();
+                return Task.CompletedTask;
+            },
             restoreWindow: () => restored = true);
 
         var handling = dispatcher.Handle();
 
-        Assert.True(handling.IsCompletedSuccessfully);
-        Assert.False(restored);
-        Assert.NotNull(queuedAction);
-        queuedAction();
+        await handling;
         Assert.True(restored);
     }
 
@@ -29,7 +29,11 @@ public sealed class ShowCommandDispatcherTests
         var posted = false;
         var dispatcher = new ShowCommandDispatcher(
             isShuttingDown: () => true,
-            post: _ => posted = true,
+            post: _ =>
+            {
+                posted = true;
+                return Task.CompletedTask;
+            },
             restoreWindow: () => throw new InvalidOperationException("不应恢复窗口"));
 
         var handling = dispatcher.Handle();

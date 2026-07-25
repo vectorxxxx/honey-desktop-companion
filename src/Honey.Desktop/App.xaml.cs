@@ -69,9 +69,23 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        var environmentDataRoot = Environment.GetEnvironmentVariable("HONEY_DATA_ROOT");
         var configuredDataRoot = startup.DataRoot
-            ?? Environment.GetEnvironmentVariable("HONEY_DATA_ROOT");
-        var paths = new AppDataPaths(configuredDataRoot);
+            ?? (string.IsNullOrWhiteSpace(environmentDataRoot) ? null : environmentDataRoot);
+        AppDataPaths paths;
+        try
+        {
+            paths = new AppDataPaths(configuredDataRoot);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException)
+        {
+            Trace.TraceError("数据目录无效：{0}", exception);
+            Shutdown(2);
+            return;
+        }
         if (startup.Command == StartupCommand.VerifyData)
         {
             try
@@ -92,7 +106,21 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        var identity = SingleInstanceIdentity.Create(paths.RootDirectory);
+        SingleInstanceIdentity identity;
+        try
+        {
+            identity = SingleInstanceIdentity.Create(paths.RootDirectory);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or IOException
+                or UnauthorizedAccessException
+                or System.ComponentModel.Win32Exception)
+        {
+            Trace.TraceError("无法安全解析单实例数据目录：{0}", exception);
+            Shutdown(2);
+            return;
+        }
         _singleInstance = new SingleInstanceCoordinator(identity);
         if (!_singleInstance.IsPrimary)
         {
@@ -102,7 +130,12 @@ public partial class App : System.Windows.Application
                 var command = startup.Command == StartupCommand.Shutdown
                     ? SingleInstanceCommand.Shutdown
                     : SingleInstanceCommand.Show;
-                delivered = await _singleInstance.SendAsync(command);
+                var result = await _singleInstance.SendWithResultAsync(command);
+                delivered = result.Success;
+                if (delivered && command == SingleInstanceCommand.Shutdown)
+                {
+                    delivered = await WaitForPrimaryExitAsync(result.ServerProcessId);
+                }
             }
             await _singleInstance.DisposeAsync();
             _singleInstance = null;
@@ -209,7 +242,7 @@ public partial class App : System.Windows.Application
         };
         _showCommandDispatcher = new ShowCommandDispatcher(
             IsShuttingDown,
-            action => _ = Dispatcher.BeginInvoke(action),
+            action => Dispatcher.InvokeAsync(action).Task,
             () => _overlayWindow?.ShowAndActivate());
         MainWindow = _overlayWindow;
 
@@ -257,6 +290,25 @@ public partial class App : System.Windows.Application
                 _singleInstance = null;
             }
             Shutdown();
+        }
+    }
+
+    private static async Task<bool> WaitForPrimaryExitAsync(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            await process.WaitForExitAsync(timeout.Token);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
         }
     }
 

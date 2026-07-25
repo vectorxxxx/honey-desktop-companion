@@ -72,9 +72,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\soak-test.ps1 `
 ```
 
 发布脚本会先还原并运行全部 Release 测试，再生成 `artifacts\win-x64\Honey.exe`，最后打印文件大小与 SHA-256。`artifacts\` 不进入 Git。
-脚本会在安全校验后清空精确的输出目录，并递归确认交付目录最终只有根目录下的 `Honey.exe`。默认只允许仓库 `artifacts` 内的输出；确需发布到其他安全目录时必须显式传入 `-AllowExternalOutput`，盘符根目录和仓库根目录始终拒绝。
+脚本只允许仓库 `artifacts` 的严格子目录作为输出，拒绝外部目录、仓库根目录、`artifacts` 根目录及任何重解析点。输出目标由绑定规范路径的版本化所有权标记保护；未标记的非空目录绝不会被接管或清空。构建先进入唯一暂存目录，递归确认仅含根目录 `Honey.exe` 后才替换受控目标。
 
-冒烟测试使用唯一隔离标识精确核对本次 `Honey.exe` 的进程数量，不会操作其他 Honey 进程；存档验收会实际打开 SQLite，执行 `quick_check`、`integrity_check`、架构与状态查询，并确认损坏探针会被拒绝。
+冒烟测试使用唯一隔离标识精确核对本次 `Honey.exe` 的进程数量，不会操作其他 Honey 进程；存档验收会复制数据库及 WAL/SHM 到隔离临时目录，再执行 `quick_check`、`integrity_check`、架构与状态查询，原存档目录的文件、内容与时间戳保持不变。
 
 浸泡测试默认 8 小时，每 30 秒采样一次。验收门槛为空闲平均 CPU 小于 1%、稳定工作集小于 150 MB、最后 4 小时线性增长小于 20 MB，并且进程无异常退出。开发时可用 `-DurationSeconds`、`-SampleSeconds` 和 `-WarmupSeconds` 做短时脚本验证；短时结果不能替代正式 8 小时验收。
 

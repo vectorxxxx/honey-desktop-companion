@@ -7,6 +7,7 @@ public sealed class StartupCommandInbox
     private Func<SingleInstanceCommand, Task>? _readyHandler;
     private bool _showPending;
     private bool _shutdownPending;
+    private readonly List<TaskCompletionSource> _pendingShowCompletions = [];
 
     public StartupCommandInbox(Action cancelStartup)
     {
@@ -16,6 +17,7 @@ public sealed class StartupCommandInbox
     public async Task HandleAsync(SingleInstanceCommand command)
     {
         Func<SingleInstanceCommand, Task>? handler;
+        TaskCompletionSource? pendingCompletion = null;
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -25,6 +27,11 @@ public sealed class StartupCommandInbox
                 {
                     _shutdownPending = true;
                     _showPending = false;
+                    foreach (var completion in _pendingShowCompletions)
+                    {
+                        completion.TrySetCanceled();
+                    }
+                    _pendingShowCompletions.Clear();
                     if (_readyHandler is null)
                     {
                         _cancelStartup();
@@ -34,6 +41,12 @@ public sealed class StartupCommandInbox
             else if (!_shutdownPending)
             {
                 _showPending = true;
+                if (_readyHandler is null)
+                {
+                    pendingCompletion = new TaskCompletionSource(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    _pendingShowCompletions.Add(pendingCompletion);
+                }
             }
 
             handler = _readyHandler;
@@ -50,6 +63,10 @@ public sealed class StartupCommandInbox
         if (handler is not null)
         {
             await handler(command).ConfigureAwait(false);
+        }
+        else if (pendingCompletion is not null)
+        {
+            await pendingCompletion.Task.ConfigureAwait(false);
         }
     }
 
@@ -83,7 +100,26 @@ public sealed class StartupCommandInbox
 
         if (pending is { } command)
         {
-            await readyHandler(command).ConfigureAwait(false);
+            try
+            {
+                await readyHandler(command).ConfigureAwait(false);
+                foreach (var completion in _pendingShowCompletions)
+                {
+                    completion.TrySetResult();
+                }
+            }
+            catch (Exception exception)
+            {
+                foreach (var completion in _pendingShowCompletions)
+                {
+                    completion.TrySetException(exception);
+                }
+                throw;
+            }
+            finally
+            {
+                _pendingShowCompletions.Clear();
+            }
         }
     }
 }

@@ -10,8 +10,8 @@ public sealed class StartupCommandInboxTests
         var commands = new List<SingleInstanceCommand>();
         var inbox = new StartupCommandInbox(() => { });
 
-        await inbox.HandleAsync(SingleInstanceCommand.Show);
-        await inbox.HandleAsync(SingleInstanceCommand.Show);
+        var first = inbox.HandleAsync(SingleInstanceCommand.Show);
+        var second = inbox.HandleAsync(SingleInstanceCommand.Show);
         Assert.Empty(commands);
 
         await inbox.AttachAsync(command =>
@@ -19,6 +19,7 @@ public sealed class StartupCommandInboxTests
             commands.Add(command);
             return Task.CompletedTask;
         });
+        await Task.WhenAll(first, second);
 
         Assert.Equal([SingleInstanceCommand.Show], commands);
     }
@@ -30,8 +31,9 @@ public sealed class StartupCommandInboxTests
         var commands = new List<SingleInstanceCommand>();
         var inbox = new StartupCommandInbox(() => Interlocked.Increment(ref cancelled));
 
-        await inbox.HandleAsync(SingleInstanceCommand.Show);
+        var show = inbox.HandleAsync(SingleInstanceCommand.Show);
         await inbox.HandleAsync(SingleInstanceCommand.Shutdown);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => show);
         await inbox.AttachAsync(command =>
         {
             commands.Add(command);

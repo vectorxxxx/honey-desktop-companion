@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <Resource Include="Assets\Honey.ico" />
+    <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md"
+                      LogicalName="Honey.THIRD-PARTY-NOTICES.md" />
   </ItemGroup>
 
   <PropertyGroup>
