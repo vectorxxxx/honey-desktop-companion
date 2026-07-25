@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Honey.Domain\Honey.Domain.csproj" />
     <ProjectReference Include="..\..\src\Honey.Rendering\Honey.Rendering.csproj" />
   </ItemGroup>
 

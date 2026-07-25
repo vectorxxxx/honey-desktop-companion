@@ -9,7 +9,130 @@
         Background="Transparent"
         ShowInTaskbar="False"
         Topmost="True"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        xmlns:skia="clr-namespace:SkiaSharp.Views.WPF;assembly=SkiaSharp.Views.WPF">
     <Grid x:Name="SceneHost"
-          Background="Transparent" />
+          Background="Transparent">
+        <skia:SKElement x:Name="SpiderCanvas"
+                        PaintSurface="OnPaintSurface"
+                        IsHitTestVisible="False" />
+
+        <Canvas x:Name="RadialMenu"
+                Width="260"
+                Height="260"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Visibility="Collapsed"
+                Panel.ZIndex="10">
+            <Canvas.Resources>
+                <Style x:Key="RadialButtonStyle" TargetType="Button">
+                    <Setter Property="Width" Value="48" />
+                    <Setter Property="Height" Value="48" />
+                    <Setter Property="Padding" Value="13" />
+                    <Setter Property="Foreground" Value="#E7FFF8" />
+                    <Setter Property="Background" Value="#E6213F3B" />
+                    <Setter Property="BorderBrush" Value="#9A92D7CA" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="Cursor" Value="Hand" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Shell"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="24">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Shell" Property="Background" Value="#F2365F58" />
+                                        <Setter TargetName="Shell" Property="BorderBrush" Value="#D1D9FFF4" />
+                                    </Trigger>
+                                    <Trigger Property="IsKeyboardFocused" Value="True">
+                                        <Setter TargetName="Shell" Property="BorderBrush" Value="#FFF5FFFC" />
+                                        <Setter TargetName="Shell" Property="BorderThickness" Value="2" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Shell" Property="Background" Value="#FF173A36" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Canvas.Resources>
+
+            <Button x:Name="PetMenuButton"
+                    Canvas.Left="106" Canvas.Top="10"
+                    Style="{StaticResource RadialButtonStyle}"
+                    ToolTip="抚摸"
+                    AutomationProperties.Name="抚摸白玉蜘蛛"
+                    Click="OnPetButtonClick">
+                <Viewbox Width="22" Height="22">
+                    <Canvas Width="24" Height="24">
+                        <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" Fill="Transparent"
+                              Data="M20.84,4.61 C18.78,2.55 15.44,2.55 13.38,4.61 L12,5.99 L10.62,4.61 C8.56,2.55 5.22,2.55 3.16,4.61 C1.1,6.67 1.1,10.01 3.16,12.07 L12,20.91 L20.84,12.07 C22.9,10.01 22.9,6.67 20.84,4.61 Z" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+            <Button Canvas.Left="196" Canvas.Top="66"
+                    Style="{StaticResource RadialButtonStyle}"
+                    ToolTip="暂停或恢复"
+                    AutomationProperties.Name="暂停或恢复自主行动"
+                    Click="OnPauseButtonClick">
+                <Viewbox Width="22" Height="22">
+                    <Canvas Width="24" Height="24">
+                        <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M9,5 L9,19 M15,5 L15,19" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+            <Button Canvas.Left="164" Canvas.Top="172"
+                    Style="{StaticResource RadialButtonStyle}"
+                    ToolTip="休息"
+                    AutomationProperties.Name="让白玉蜘蛛休息"
+                    Click="OnSleepButtonClick">
+                <Viewbox Width="22" Height="22">
+                    <Canvas Width="24" Height="24">
+                        <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" Fill="Transparent"
+                              Data="M21,12.79 A9,9 0 1 1 11.21,3 A7,7 0 0 0 21,12.79 Z" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+            <Button Canvas.Left="48" Canvas.Top="172"
+                    Style="{StaticResource RadialButtonStyle}"
+                    ToolTip="切换狂暴预览"
+                    AutomationProperties.Name="切换普通与狂暴形态"
+                    Click="OnModeButtonClick">
+                <Viewbox Width="22" Height="22">
+                    <Canvas Width="24" Height="24">
+                        <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" Fill="Transparent"
+                              Data="M13,2 L3,14 L12,14 L11,22 L21,10 L12,10 Z" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+            <Button Canvas.Left="16" Canvas.Top="66"
+                    Style="{StaticResource RadialButtonStyle}"
+                    ToolTip="关闭菜单"
+                    AutomationProperties.Name="关闭环形菜单"
+                    Click="OnCloseMenuButtonClick">
+                <Viewbox Width="22" Height="22">
+                    <Canvas Width="24" Height="24">
+                        <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M18,6 L6,18 M6,6 L18,18" />
+                    </Canvas>
+                </Viewbox>
+            </Button>
+        </Canvas>
+    </Grid>
 </Window>
