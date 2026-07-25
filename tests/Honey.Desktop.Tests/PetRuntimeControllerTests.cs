@@ -197,6 +197,50 @@ public sealed class PetRuntimeControllerTests
         fixture.Runtime.Dispose();
     }
 
+    [Theory]
+    [InlineData("normal", Honey.Domain.Model.PetMode.Normal)]
+    [InlineData("berserk", Honey.Domain.Model.PetMode.Berserk)]
+    public void Constructor_首状态立即应用尺寸和强制模式(
+        string preference,
+        Honey.Domain.Model.PetMode expectedMode)
+    {
+        var pack = new WhiteJadeSpiderPack();
+        var initial = pack.CreateInitialState(DateTimeOffset.UtcNow) with
+        {
+            Scale = 1.8,
+            Mode = expectedMode == Honey.Domain.Model.PetMode.Normal
+                ? Honey.Domain.Model.PetMode.Berserk
+                : Honey.Domain.Model.PetMode.Normal
+        };
+        using var runtime = new PetRuntimeController(
+            initial,
+            new AppSettings { PetSize = 98, ModePreference = preference },
+            startTimer: false);
+
+        var first = runtime.Tick(TimeSpan.Zero);
+
+        Assert.Equal(0.7, runtime.State.Scale, 10);
+        Assert.Equal(expectedMode, runtime.State.Mode);
+        Assert.Equal(0.7f, first.Scale, 5);
+        Assert.Equal(expectedMode, first.Mode);
+    }
+
+    [Fact]
+    public void Constructor_Auto模式保留存档模式()
+    {
+        var pack = new WhiteJadeSpiderPack();
+        var initial = pack.CreateInitialState(DateTimeOffset.UtcNow) with
+        {
+            Mode = Honey.Domain.Model.PetMode.Berserk
+        };
+        using var runtime = new PetRuntimeController(
+            initial,
+            new AppSettings { ModePreference = "auto" },
+            startTimer: false);
+
+        Assert.Equal(Honey.Domain.Model.PetMode.Berserk, runtime.State.Mode);
+    }
+
     [Fact]
     public void TickFromClock_墙钟回拨不会冻结单调推进()
     {

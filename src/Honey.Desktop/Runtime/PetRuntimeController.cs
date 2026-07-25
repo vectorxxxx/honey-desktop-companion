@@ -15,7 +15,17 @@ public interface IPetRuntimeCommands
     string ToggleMode();
 }
 
-public sealed class PetRuntimeController : IDisposable, IAsyncDisposable, IPetRuntimeCommands
+public interface IPetRuntimeLifecycle
+{
+    PetState State { get; }
+    Task StopAsync();
+}
+
+public sealed class PetRuntimeController :
+    IDisposable,
+    IAsyncDisposable,
+    IPetRuntimeCommands,
+    IPetRuntimeLifecycle
 {
     public static readonly TimeSpan SimulationStep = TimeSpan.FromMilliseconds(250);
     public static readonly TimeSpan SkillStep = TimeSpan.FromMilliseconds(50);
@@ -62,8 +72,14 @@ public sealed class PetRuntimeController : IDisposable, IAsyncDisposable, IPetRu
         Random? random = null,
         bool startTimer = true)
     {
-        _state = state;
         _settings = settings.Normalize();
+        _state = state with
+        {
+            Scale = _settings.PetSize / 140d,
+            Mode = PetRuntimePolicy.ApplyModePreference(
+                _settings.ModePreference,
+                state.Mode)
+        };
         _timeProvider = timeProvider ?? TimeProvider.System;
         _random = random ?? Random.Shared;
         _pack = new WhiteJadeSpiderPack();

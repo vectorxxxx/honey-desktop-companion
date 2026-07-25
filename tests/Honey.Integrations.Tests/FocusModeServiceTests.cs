@@ -21,11 +21,11 @@ public sealed class FocusModeServiceTests
     }
 
     [Fact]
-    public void Evaluate_忽略自身与桌面Shell()
+    public void FocusSnapshot_全屏时忽略自身与桌面Shell()
     {
-        Assert.False(FocusModeService.Evaluate(true, true, false));
-        Assert.False(FocusModeService.Evaluate(true, false, true));
-        Assert.True(FocusModeService.Evaluate(true, false, false));
+        Assert.False(new FocusSnapshot(true, false, true, false).IsFocusModeActive);
+        Assert.False(new FocusSnapshot(true, false, false, true).IsFocusModeActive);
+        Assert.True(new FocusSnapshot(true, false, false, false).IsFocusModeActive);
     }
 
     [Fact]

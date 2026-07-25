@@ -89,9 +89,6 @@ public sealed class FocusModeService : IDisposable, IAsyncDisposable
         && Math.Abs(window.Right - monitor.Right) <= tolerance
         && Math.Abs(window.Bottom - monitor.Bottom) <= tolerance;
 
-    public static bool Evaluate(bool fullscreenOrLocked, bool ownWindow, bool shellWindow) =>
-        fullscreenOrLocked && !ownWindow && !shellWindow;
-
     public void PollNow()
     {
         if (Volatile.Read(ref _stopped) != 0)

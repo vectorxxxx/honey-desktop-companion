@@ -113,6 +113,7 @@ public partial class OverlayWindow : Window
     public OverlayHitTestPolicy HitTestPolicy => _hitTestPolicy;
     public PetState RuntimeState => _runtime.State;
     public IPetRuntimeCommands RuntimeCommands => _runtime;
+    public IPetRuntimeLifecycle RuntimeLifecycle => _runtime;
 
     public RenderSnapshot Snapshot
     {

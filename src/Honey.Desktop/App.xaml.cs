@@ -2,6 +2,7 @@ using System.Windows;
 using Honey.Desktop.SingleInstance;
 using Honey.Desktop.Settings;
 using Honey.Desktop.Runtime;
+using Honey.Desktop.Shutdown;
 using Honey.Desktop.Tray;
 using Honey.Content.WhiteJadeSpider;
 using Honey.Integrations.Windows;
@@ -24,12 +25,16 @@ public partial class App : System.Windows.Application
     private SettingsApplicationCoordinator? _settingsCoordinator;
     private FocusModeService? _focusMode;
     private SqlitePetStateStore? _petStateStore;
+    private IPetRuntimeLifecycle? _runtimeLifecycle;
+    private ShutdownCoordinator? _shutdownCoordinator;
     private IDisposable? _overlayFocusLease;
     private IDisposable? _settingsFocusLease;
     private AppSettings _settings = new();
     private System.Threading.Timer? _saveTimer;
+    private readonly AsyncShutdownOperationQueue _periodicSaveQueue = new();
     private int _shuttingDown;
-    private int _shutdownPrepared;
+    private int _sessionEndingBridgeUsed;
+    private static readonly TimeSpan BlockingShutdownTimeout = TimeSpan.FromSeconds(4);
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -76,6 +81,7 @@ public partial class App : System.Windows.Application
             new OverlayHitTestPolicy(),
             initial,
             _settings);
+        _runtimeLifecycle = _overlayWindow.RuntimeLifecycle;
         _overlayWindow.UserPauseChanged += OnOverlayPauseChanged;
         _overlayWindow.PetCommandRequested += OnPetCommandRequested;
         _overlayWindow.SkillCommandRequested += OnSkillCommandRequested;
@@ -105,11 +111,20 @@ public partial class App : System.Windows.Application
         _trayIcon.ExitRequested += OnExitRequested;
         _trayIcon.SetFocusMode(_settings.FocusMode);
 
+        _shutdownCoordinator = new ShutdownCoordinator(
+            PrepareShutdownCoreAsync,
+            () => Dispatcher.InvokeAsync(() =>
+            {
+                _overlayWindow?.CloseForExit();
+                Shutdown();
+            }).Task,
+            ReportShutdownError);
+
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         _singleInstance.StartListening(HandleSingleInstanceCommandAsync);
         _focusMode.Changed += OnFocusSnapshotChanged;
         _saveTimer = new System.Threading.Timer(
-            _ => _ = SavePetStateSafelyAsync(),
+            _ => _periodicSaveQueue.TryEnqueue(SavePetStateSafelyAsync),
             null,
             TimeSpan.FromMinutes(1),
             TimeSpan.FromMinutes(1));
@@ -128,22 +143,38 @@ public partial class App : System.Windows.Application
     {
         Interlocked.Exchange(ref _shuttingDown, 1);
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
-        PrepareShutdownAsync().GetAwaiter().GetResult();
-        _focusMode?.Dispose();
+        var preparationCompleted =
+            Volatile.Read(ref _sessionEndingBridgeUsed) != 0
+                ? _shutdownCoordinator?.IsPreparationCompleted == true
+                : TryPrepareForBlockingExit("直接退出回退");
+        if (preparationCompleted)
+        {
+            _focusMode?.Dispose();
+        }
         _focusMode = null;
 
+        _overlayFocusLease?.Dispose();
+        _overlayFocusLease = null;
+        _settingsFocusLease?.Dispose();
+        _settingsFocusLease = null;
         _settingsWindow = null;
         _trayIcon?.Dispose();
         _trayIcon = null;
         _showCommandDispatcher = null;
         _overlayWindow = null;
-        if (_singleInstance is not null)
-        {
-            _singleInstance.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            _singleInstance = null;
-        }
+        _runtimeLifecycle = null;
+        _singleInstance = null;
+        _shutdownCoordinator = null;
 
         base.OnExit(e);
+    }
+
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        Interlocked.Exchange(ref _shuttingDown, 1);
+        Interlocked.Exchange(ref _sessionEndingBridgeUsed, 1);
+        TryPrepareForBlockingExit("Windows 会话结束");
+        base.OnSessionEnding(e);
     }
 
     private Task HandleSingleInstanceCommandAsync(SingleInstanceCommand command)
@@ -213,16 +244,9 @@ public partial class App : System.Windows.Application
         _settingsWindow.Activate();
     }
 
-    private async void OnExitRequested(object? sender, EventArgs e)
+    private void OnExitRequested(object? sender, EventArgs e)
     {
-        if (Interlocked.Exchange(ref _shuttingDown, 1) != 0)
-        {
-            return;
-        }
-
-        await PrepareShutdownAsync();
-        _overlayWindow?.CloseForExit();
-        Shutdown();
+        _ = RequestShutdownAsync();
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
@@ -305,11 +329,12 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            if (_overlayWindow is not null && _petStateStore is not null)
+            if (_runtimeLifecycle is not null && _petStateStore is not null)
             {
                 await _petStateStore.SaveAsync(
-                    _overlayWindow.RuntimeState,
-                    CancellationToken.None);
+                        _runtimeLifecycle.State,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
             }
         }
         catch (Exception exception)
@@ -318,28 +343,121 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private async Task PrepareShutdownAsync()
+    private Task RequestShutdownAsync()
     {
-        if (Interlocked.Exchange(ref _shutdownPrepared, 1) != 0)
-        {
-            return;
-        }
-
-        _saveTimer?.Dispose();
-        _saveTimer = null;
-        if (_overlayWindow is not null)
-        {
-            await _overlayWindow.StopRuntimeAsync();
-        }
-        _overlayFocusLease?.Dispose();
-        _overlayFocusLease = null;
-        _settingsFocusLease?.Dispose();
-        _settingsFocusLease = null;
-        if (_focusMode is not null)
-        {
-            await _focusMode.StopAsync();
-        }
-
-        await SavePetStateSafelyAsync();
+        Interlocked.Exchange(ref _shuttingDown, 1);
+        return _shutdownCoordinator?.RequestShutdownAsync() ?? Task.CompletedTask;
     }
+
+    private async Task PrepareShutdownCoreAsync()
+    {
+        var saveTimer = Interlocked.Exchange(ref _saveTimer, null);
+        if (saveTimer is not null)
+        {
+            try
+            {
+                await saveTimer.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+                when (!ShutdownExceptionPolicy.IsFatal(exception))
+            {
+                ReportShutdownError(exception);
+            }
+        }
+
+        try
+        {
+            await _periodicSaveQueue.StopAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+            when (!ShutdownExceptionPolicy.IsFatal(exception))
+        {
+            ReportShutdownError(exception);
+        }
+
+        var runtime = _runtimeLifecycle;
+        var focusMode = _focusMode;
+        var petStateStore = _petStateStore;
+        var singleInstance = _singleInstance;
+
+        if (runtime is not null)
+        {
+            try
+            {
+                await runtime.StopAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+                when (!ShutdownExceptionPolicy.IsFatal(exception))
+            {
+                ReportShutdownError(exception);
+            }
+        }
+
+        if (focusMode is not null)
+        {
+            try
+            {
+                await focusMode.StopAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+                when (!ShutdownExceptionPolicy.IsFatal(exception))
+            {
+                ReportShutdownError(exception);
+            }
+        }
+
+        if (runtime is not null && petStateStore is not null)
+        {
+            try
+            {
+                await petStateStore.SaveAsync(
+                        runtime.State,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception)
+                when (!ShutdownExceptionPolicy.IsFatal(exception))
+            {
+                ReportShutdownError(exception);
+            }
+        }
+
+        if (singleInstance is not null)
+        {
+            try
+            {
+                await singleInstance.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+                when (!ShutdownExceptionPolicy.IsFatal(exception))
+            {
+                ReportShutdownError(exception);
+            }
+        }
+    }
+
+    private bool TryPrepareForBlockingExit(string path)
+    {
+        if (_shutdownCoordinator is null)
+        {
+            return true;
+        }
+
+        var completed = BlockingShutdownBridge.TryRun(
+            _shutdownCoordinator.PrepareAsync,
+            BlockingShutdownTimeout,
+            ReportShutdownError);
+        if (!completed)
+        {
+            Trace.TraceWarning(
+                "{0}未能在 {1} 内完成关键退出准备，继续释放 UI 资源。",
+                path,
+                BlockingShutdownTimeout);
+        }
+
+        return completed;
+    }
+
+    private static void ReportShutdownError(Exception exception) =>
+        Trace.TraceError("应用退出错误：{0}", exception);
 }
