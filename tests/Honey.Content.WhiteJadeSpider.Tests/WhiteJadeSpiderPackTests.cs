@@ -11,7 +11,7 @@ public sealed class WhiteJadeSpiderPackTests
         var pack = new WhiteJadeSpiderPack();
 
         Assert.Equal("honey.white-jade-spider", pack.Manifest.SpeciesId);
-        Assert.Equal(new Version(1, 0), pack.Manifest.ContractVersion);
+        Assert.Equal(new Version(1, 0), pack.Manifest.Version);
         Assert.Equal("白玉蜘蛛", pack.Manifest.DisplayName);
         Assert.NotEmpty(pack.Behaviors);
         Assert.Empty(pack.Interactions);

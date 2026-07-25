@@ -5,7 +5,7 @@ namespace Honey.Domain.Species;
 
 public sealed record SpeciesManifest(
     string SpeciesId,
-    Version ContractVersion,
+    Version Version,
     string DisplayName);
 
 public interface IBehaviorDefinition
