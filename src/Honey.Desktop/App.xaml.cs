@@ -14,6 +14,9 @@ using System.Net.Http;
 using System.Net;
 using System.Windows.Interop;
 using Microsoft.Win32;
+using Honey.Desktop.Startup;
+using System.IO;
+using Honey.Desktop.Diagnostics;
 
 namespace Honey.Desktop;
 
@@ -47,23 +50,57 @@ public partial class App : System.Windows.Application
     private int _shuttingDown;
     private int _sessionEndingBridgeUsed;
     private static readonly TimeSpan BlockingShutdownTimeout = TimeSpan.FromSeconds(4);
+    private TextWriterTraceListener? _logListener;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _singleInstance = new SingleInstanceCoordinator();
+        StartupArguments startup;
+        try
+        {
+            startup = StartupArguments.Parse(e.Args);
+        }
+        catch (ArgumentException exception)
+        {
+            Trace.TraceError("启动参数无效：{0}", exception.Message);
+            Shutdown(2);
+            return;
+        }
+
+        var configuredDataRoot = startup.DataRoot
+            ?? Environment.GetEnvironmentVariable("HONEY_DATA_ROOT");
+        var paths = new AppDataPaths(configuredDataRoot);
+        var identity = SingleInstanceIdentity.Create(paths.RootDirectory);
+        _singleInstance = new SingleInstanceCoordinator(identity);
         if (!_singleInstance.IsPrimary)
         {
-            await _singleInstance.SendShowAsync();
+            if (startup.Command != StartupCommand.Background)
+            {
+                var command = startup.Command == StartupCommand.Shutdown
+                    ? SingleInstanceCommand.Shutdown
+                    : SingleInstanceCommand.Show;
+                await _singleInstance.SendAsync(command);
+            }
             await _singleInstance.DisposeAsync();
             _singleInstance = null;
             Shutdown();
             return;
         }
 
-        var paths = new AppDataPaths();
+        if (startup.Command == StartupCommand.Shutdown)
+        {
+            await _singleInstance.DisposeAsync();
+            _singleInstance = null;
+            Shutdown();
+            return;
+        }
+
         paths.EnsureDirectories();
-        _secretStore = new DpapiSecretStore();
+        _logListener = AppTraceLog.Create(paths.LogsDirectory);
+        Trace.Listeners.Add(_logListener);
+        Trace.AutoFlush = true;
+        _secretStore = new DpapiSecretStore(
+            Path.Combine(paths.RootDirectory, "secrets.json"));
         try
         {
             _aiSecret = await _secretStore.LoadBoundAsync(CancellationToken.None);
@@ -83,7 +120,8 @@ public partial class App : System.Windows.Application
         _aiRequestGate = new AiRequestGate();
         _aiConnectionTester = new AiConnectionTester(_aiRequestGate);
         _aiCoordinator = new AiCompanionCoordinator(CreateAiProvider, _aiRequestGate);
-        _settingsStore = new SettingsStore();
+        _settingsStore = new SettingsStore(
+            Path.Combine(paths.RootDirectory, "settings.json"));
         try
         {
             _settings = await _settingsStore.LoadAsync(CancellationToken.None);
@@ -160,7 +198,7 @@ public partial class App : System.Windows.Application
             null,
             TimeSpan.FromMinutes(1),
             TimeSpan.FromMinutes(1));
-        if (!e.Args.Contains("--background", StringComparer.OrdinalIgnoreCase))
+        if (startup.Command != StartupCommand.Background)
         {
             _overlayWindow.Show();
             _overlayWindow.PlaceAtPrimaryBottomRight();
@@ -203,6 +241,13 @@ public partial class App : System.Windows.Application
         _runtimeLifecycle = null;
         _singleInstance = null;
         _shutdownCoordinator = null;
+        if (_logListener is not null)
+        {
+            Trace.Listeners.Remove(_logListener);
+            _logListener.Flush();
+            _logListener.Dispose();
+            _logListener = null;
+        }
 
         base.OnExit(e);
     }
@@ -217,6 +262,16 @@ public partial class App : System.Windows.Application
 
     private Task HandleSingleInstanceCommandAsync(SingleInstanceCommand command)
     {
+        if (command == SingleInstanceCommand.Shutdown)
+        {
+            if (!IsShuttingDown())
+            {
+                _ = Dispatcher.BeginInvoke(() => _ = RequestShutdownAsync());
+            }
+
+            return Task.CompletedTask;
+        }
+
         if (command != SingleInstanceCommand.Show)
         {
             return Task.CompletedTask;

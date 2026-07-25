@@ -9,4 +9,12 @@ public sealed class TrayIconServiceTests
     {
         using var tray = new TrayIconService();
     }
+
+    [Fact]
+    public void 图标资源地址跟随发布程序集名称()
+    {
+        Assert.Equal(
+            "/Honey;component/Assets/Honey.ico",
+            TrayIconService.CreateIconResourceUri("Honey").OriginalString);
+    }
 }

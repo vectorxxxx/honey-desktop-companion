@@ -1,18 +1,16 @@
 using System.IO;
 using System.IO.Pipes;
-using System.Text;
 
 namespace Honey.Desktop.SingleInstance;
 
 public sealed class SingleInstanceCoordinator : IAsyncDisposable
 {
-    public const string MutexName = @"Local\Honey.Desktop.Singleton";
-    private const string PipeName = "Honey.Desktop.Commands";
     private const int MaximumMessageBytes = 32;
     private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan MessageTimeout = TimeSpan.FromMilliseconds(1000);
 
     private readonly Mutex _mutex;
+    private readonly SingleInstanceIdentity _identity;
     private readonly Action<Exception>? _errorSink;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly object _disposeSync = new();
@@ -20,9 +18,17 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
     private Task? _disposeTask;
 
     public SingleInstanceCoordinator(Action<Exception>? errorSink = null)
+        : this(SingleInstanceIdentity.Default, errorSink)
     {
+    }
+
+    public SingleInstanceCoordinator(
+        SingleInstanceIdentity identity,
+        Action<Exception>? errorSink = null)
+    {
+        _identity = identity ?? throw new ArgumentNullException(nameof(identity));
         _errorSink = errorSink;
-        _mutex = new Mutex(initiallyOwned: false, MutexName, out var createdNew);
+        _mutex = new Mutex(initiallyOwned: false, _identity.MutexName, out var createdNew);
         IsPrimary = createdNew;
     }
 
@@ -41,10 +47,19 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
             throw new InvalidOperationException("命令监听已经启动。");
         }
 
-        _listenerTask = ListenAsync(commandHandler, _errorSink, _stopSource.Token);
+        _listenerTask = ListenAsync(
+            _identity.PipeName,
+            commandHandler,
+            _errorSink,
+            _stopSource.Token);
     }
 
-    public async Task<bool> SendShowAsync(CancellationToken cancellationToken = default)
+    public Task<bool> SendShowAsync(CancellationToken cancellationToken = default) =>
+        SendAsync(SingleInstanceCommand.Show, cancellationToken);
+
+    public async Task<bool> SendAsync(
+        SingleInstanceCommand command,
+        CancellationToken cancellationToken = default)
     {
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(ConnectionTimeout);
@@ -52,11 +67,11 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
         {
             await using var client = new NamedPipeClientStream(
                 ".",
-                PipeName,
+                _identity.PipeName,
                 PipeDirection.Out,
                 PipeOptions.Asynchronous);
             await client.ConnectAsync(timeoutSource.Token).ConfigureAwait(false);
-            await client.WriteAsync(Encoding.UTF8.GetBytes("show"), timeoutSource.Token)
+            await client.WriteAsync(SingleInstanceMessage.Serialize(command), timeoutSource.Token)
                 .ConfigureAwait(false);
             await client.FlushAsync(timeoutSource.Token).ConfigureAwait(false);
             return true;
@@ -81,6 +96,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
     }
 
     private static async Task ListenAsync(
+        string pipeName,
         Func<SingleInstanceCommand, Task> commandHandler,
         Action<Exception>? errorSink,
         CancellationToken cancellationToken)
@@ -90,7 +106,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
             try
             {
                 await using var server = new NamedPipeServerStream(
-                    PipeName,
+                    pipeName,
                     PipeDirection.In,
                     1,
                     PipeTransmissionMode.Byte,

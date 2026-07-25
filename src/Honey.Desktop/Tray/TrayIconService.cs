@@ -85,13 +85,23 @@ public sealed class TrayIconService : IDisposable
 
     private static DrawingIcon LoadIcon()
     {
+        var assemblyName = typeof(TrayIconService).Assembly.GetName().Name
+            ?? throw new InvalidOperationException("无法确定托盘资源程序集名称。");
         var resource = WpfApplication.GetResourceStream(
-            new Uri("/Honey.Desktop;component/Assets/Honey.ico", UriKind.Relative))
+            CreateIconResourceUri(assemblyName))
             ?? throw new InvalidOperationException("无法加载托盘图标 Assets/Honey.ico。");
         using (resource.Stream)
         using (var icon = new DrawingIcon(resource.Stream))
         {
             return (DrawingIcon)icon.Clone();
         }
+    }
+
+    public static Uri CreateIconResourceUri(string assemblyName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(assemblyName);
+        return new Uri(
+            $"/{assemblyName};component/Assets/Honey.ico",
+            UriKind.Relative);
     }
 }

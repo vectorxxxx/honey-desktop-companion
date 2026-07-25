@@ -4,12 +4,14 @@ namespace Honey.Desktop.SingleInstance;
 
 public enum SingleInstanceCommand
 {
-    Show
+    Show,
+    Shutdown
 }
 
 public static class SingleInstanceMessage
 {
     private static readonly byte[] ShowBytes = Encoding.UTF8.GetBytes("show");
+    private static readonly byte[] ShutdownBytes = Encoding.UTF8.GetBytes("shutdown");
 
     public static bool TryParse(ReadOnlySpan<byte> message, out SingleInstanceCommand command)
     {
@@ -19,7 +21,21 @@ public static class SingleInstanceMessage
             return true;
         }
 
+        if (message.SequenceEqual(ShutdownBytes))
+        {
+            command = SingleInstanceCommand.Shutdown;
+            return true;
+        }
+
         command = default;
         return false;
     }
+
+    public static ReadOnlyMemory<byte> Serialize(SingleInstanceCommand command) =>
+        command switch
+        {
+            SingleInstanceCommand.Show => ShowBytes,
+            SingleInstanceCommand.Shutdown => ShutdownBytes,
+            _ => throw new ArgumentOutOfRangeException(nameof(command))
+        };
 }

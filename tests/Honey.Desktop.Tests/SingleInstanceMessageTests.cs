@@ -14,6 +14,17 @@ public sealed class SingleInstanceMessageTests
         Assert.Equal(SingleInstanceCommand.Show, command);
     }
 
+    [Fact]
+    public void TryParse_接受严格的Shutdown命令()
+    {
+        var accepted = SingleInstanceMessage.TryParse(
+            Encoding.UTF8.GetBytes("shutdown"),
+            out var command);
+
+        Assert.True(accepted);
+        Assert.Equal(SingleInstanceCommand.Shutdown, command);
+    }
+
     [Theory]
     [InlineData("SHOW")]
     [InlineData("show\n")]

@@ -106,6 +106,48 @@ public sealed class SingleInstanceCoordinatorTests
         await coordinator.DisposeAsync();
     }
 
+    [Fact]
+    public async Task SendAsync_向主实例传递Shutdown()
+    {
+        var handled = new TaskCompletionSource<SingleInstanceCommand>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var identity = SingleInstanceIdentity.Create(
+            Path.Combine(Path.GetTempPath(), $"honey-tests-{Guid.NewGuid():N}"));
+        await using var primary = new SingleInstanceCoordinator(identity);
+        primary.StartListening(command =>
+        {
+            handled.TrySetResult(command);
+            return Task.CompletedTask;
+        });
+        await using var secondary = new SingleInstanceCoordinator(identity);
+
+        Assert.False(secondary.IsPrimary);
+        Assert.True(await secondary.SendAsync(
+            SingleInstanceCommand.Shutdown,
+            TestContext.Current.CancellationToken));
+        Assert.Equal(
+            SingleInstanceCommand.Shutdown,
+            await handled.Task.WaitAsync(
+                TimeSpan.FromSeconds(3),
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task 不同数据目录拥有彼此隔离的实例身份()
+    {
+        var firstIdentity = SingleInstanceIdentity.Create(
+            Path.Combine(Path.GetTempPath(), $"honey-a-{Guid.NewGuid():N}"));
+        var secondIdentity = SingleInstanceIdentity.Create(
+            Path.Combine(Path.GetTempPath(), $"honey-b-{Guid.NewGuid():N}"));
+
+        await using var first = new SingleInstanceCoordinator(firstIdentity);
+        await using var second = new SingleInstanceCoordinator(secondIdentity);
+
+        Assert.True(first.IsPrimary);
+        Assert.True(second.IsPrimary);
+        Assert.NotEqual(firstIdentity.PipeName, secondIdentity.PipeName);
+    }
+
     private static async Task SendShowFromSecondaryAsync()
     {
         await using var secondary = new SingleInstanceCoordinator();
