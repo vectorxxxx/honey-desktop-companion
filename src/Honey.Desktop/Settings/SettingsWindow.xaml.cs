@@ -10,6 +10,7 @@ public partial class SettingsWindow : Window
     private readonly Func<AiSettingsSubmission, CancellationToken, Task> _save;
     private readonly Func<AppSettings, string?, CancellationToken, Task<string>> _testAi;
     private readonly AiSettingsTestController _testController = new();
+    private readonly AiSettingsBindingDraft _bindingDraft;
     private bool _hasStoredKey;
     private readonly bool _configurationMatched;
     private bool _clearKey;
@@ -25,6 +26,7 @@ public partial class SettingsWindow : Window
         _testAi = testAi ?? throw new ArgumentNullException(nameof(testAi));
         _hasStoredKey = hasStoredKey;
         _configurationMatched = configurationMatched;
+        _bindingDraft = new AiSettingsBindingDraft(settings.AiSecretBindingId);
         InitializeComponent();
         Apply(settings.Normalize());
         UpdateKeyStatus();
@@ -42,6 +44,7 @@ public partial class SettingsWindow : Window
         AiEnabled = AiCheck.IsChecked == true,
         AiEndpoint = AiEndpointText.Text,
         AiModel = AiModelText.Text,
+        AiSecretBindingId = _bindingDraft.BindingId,
         SoundEnabled = SoundCheck.IsChecked == true,
         SoundVolume = VolumeSlider.Value
     };
@@ -56,6 +59,7 @@ public partial class SettingsWindow : Window
         AiCheck.IsChecked = settings.AiEnabled;
         AiEndpointText.Text = settings.AiEndpoint;
         AiModelText.Text = settings.AiModel;
+        _bindingDraft.Set(settings.AiSecretBindingId);
         SoundCheck.IsChecked = settings.SoundEnabled;
         VolumeSlider.Value = settings.SoundVolume;
         PetSizeValue.Text = $"{settings.PetSize} px";
@@ -108,6 +112,7 @@ public partial class SettingsWindow : Window
         AiKeyPassword.Clear();
         _clearKey = true;
         _hasStoredKey = false;
+        _bindingDraft.Clear();
         UpdateKeyStatus();
     }
 
