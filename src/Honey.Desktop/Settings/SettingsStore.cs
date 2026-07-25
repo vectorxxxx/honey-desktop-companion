@@ -46,7 +46,7 @@ public sealed class SettingsStore : ISettingsPersistence
 
     public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -57,11 +57,11 @@ public sealed class SettingsStore : ISettingsPersistence
 
             try
             {
-                await using var stream = _openRead(_path);
+                using var stream = _openRead(_path);
                 var settings = await JsonSerializer.DeserializeAsync<AppSettings>(
                     stream,
                     JsonOptions,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
                 return (settings ?? new AppSettings()).Normalize();
             }
             catch (OperationCanceledException)
@@ -92,7 +92,7 @@ public sealed class SettingsStore : ISettingsPersistence
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        await _gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -104,7 +104,7 @@ public sealed class SettingsStore : ISettingsPersistence
                 $"{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
             try
             {
-                await using (var stream = new FileStream(
+                using (var stream = new FileStream(
                     temporary,
                     FileMode.CreateNew,
                     FileAccess.Write,
@@ -116,8 +116,8 @@ public sealed class SettingsStore : ISettingsPersistence
                         stream,
                         settings.Normalize(),
                         JsonOptions,
-                        cancellationToken);
-                    await stream.FlushAsync(cancellationToken);
+                        cancellationToken).ConfigureAwait(false);
+                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                     stream.Flush(flushToDisk: true);
                 }
 

@@ -19,7 +19,8 @@ public sealed class AiConnectionTester(AiRequestGate gate)
         {
             try
             {
-                return await provider.CompleteAsync(request, cancellationToken);
+                return await provider.CompleteAsync(request, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

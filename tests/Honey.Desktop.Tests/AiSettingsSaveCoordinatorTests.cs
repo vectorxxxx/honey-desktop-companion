@@ -1,5 +1,6 @@
 using Honey.Desktop.Settings;
 using Honey.Integrations.Security;
+using Honey.Desktop.Runtime;
 
 namespace Honey.Desktop.Tests;
 
@@ -104,6 +105,47 @@ public sealed class AiSettingsSaveCoordinatorTests
             "model",
             old.BindingId,
             secrets.BoundValue).Available);
+    }
+
+    [Fact]
+    public async Task 应用退出取消在途保存并等待旧绑定补偿完成()
+    {
+        var config = Honey.Integrations.Ai.AiEndpointValidator.StrictValidate(
+            "https://old.example/v1",
+            "model");
+        var old = new BoundAiSecret(
+            "old-key", "old-binding", 1, config.CanonicalEndpoint, config.Model);
+        var secrets = new MemorySecretStore { BoundValue = old };
+        var settingsStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var save = new AiSettingsSaveCoordinator(
+            secrets,
+            async (_, token) =>
+            {
+                settingsStarted.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(false);
+            });
+        var operations = new AiOperationCoordinator();
+        _ = operations.RunAsync(
+            token => save.ApplyAsync(
+                old,
+                new AiSettingsSubmission(
+                    new AppSettings
+                    {
+                        AiEnabled = true,
+                        AiEndpoint = "https://new.example/v1",
+                        AiModel = "model"
+                    },
+                    null,
+                    false),
+                token),
+            TestContext.Current.CancellationToken);
+        await settingsStarted.Task.WaitAsync(TestContext.Current.CancellationToken);
+
+        await operations.StopAsync();
+
+        Assert.Equal(old, secrets.BoundValue);
+        Assert.True(operations.IsStopped);
     }
 
     private sealed class MemorySecretStore : IAiSecretStore

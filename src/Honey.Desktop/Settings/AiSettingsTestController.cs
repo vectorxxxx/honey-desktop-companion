@@ -30,7 +30,7 @@ public sealed class AiSettingsTestController
 
         try
         {
-            return await test(active.Source.Token);
+            return await test(active.Source.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (
             active.Source.IsCancellationRequested && !cancellationToken.IsCancellationRequested)

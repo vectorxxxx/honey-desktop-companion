@@ -42,7 +42,8 @@ public sealed class AiCompanionCoordinator
             AiCompanionResult result;
             try
             {
-                result = await provider.CompleteAsync(request, cancellationToken);
+                result = await provider.CompleteAsync(request, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

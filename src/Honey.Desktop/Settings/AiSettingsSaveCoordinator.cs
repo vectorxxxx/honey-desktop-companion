@@ -26,8 +26,8 @@ public sealed class AiSettingsSaveCoordinator(
                 AiEnabled = false,
                 AiSecretBindingId = null
             };
-            await saveSettings(disabled, cancellationToken);
-            await secretStore.DeleteAsync(cancellationToken);
+            await saveSettings(disabled, cancellationToken).ConfigureAwait(false);
+            await secretStore.DeleteAsync(cancellationToken).ConfigureAwait(false);
             return new AiSettingsSaveResult(disabled, null);
         }
 
@@ -42,7 +42,7 @@ public sealed class AiSettingsSaveCoordinator(
             }
 
             var withoutSecret = requested.Normalize() with { AiSecretBindingId = null };
-            await saveSettings(withoutSecret, cancellationToken);
+            await saveSettings(withoutSecret, cancellationToken).ConfigureAwait(false);
             return new AiSettingsSaveResult(withoutSecret, null);
         }
 
@@ -63,10 +63,10 @@ public sealed class AiSettingsSaveCoordinator(
             AiSecretBindingId = bindingId
         };
 
-        await secretStore.SaveBoundAsync(nextSecret, cancellationToken);
+        await secretStore.SaveBoundAsync(nextSecret, cancellationToken).ConfigureAwait(false);
         try
         {
-            await saveSettings(nextSettings, cancellationToken);
+            await saveSettings(nextSettings, cancellationToken).ConfigureAwait(false);
             return new AiSettingsSaveResult(nextSettings, nextSecret);
         }
         catch (Exception original)
@@ -75,11 +75,12 @@ public sealed class AiSettingsSaveCoordinator(
             {
                 if (currentSecret is null)
                 {
-                    await secretStore.DeleteAsync(CancellationToken.None);
+                    await secretStore.DeleteAsync(CancellationToken.None).ConfigureAwait(false);
                 }
                 else
                 {
-                    await secretStore.SaveBoundAsync(currentSecret, CancellationToken.None);
+                    await secretStore.SaveBoundAsync(currentSecret, CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
             }
             catch (Exception compensation)

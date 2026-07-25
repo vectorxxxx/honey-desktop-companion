@@ -32,6 +32,7 @@ public static class AiConfigurationResolver
         }
 
         if (secret is null
+            || string.IsNullOrWhiteSpace(secret.ApiKey)
             || string.IsNullOrWhiteSpace(settingsBindingId)
             || !string.Equals(settingsBindingId, secret.BindingId, StringComparison.Ordinal)
             || secret.ConfigVersion != BoundAiSecret.CurrentConfigVersion

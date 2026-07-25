@@ -34,6 +34,7 @@ public partial class App : System.Windows.Application
     private AiRequestGate? _aiRequestGate;
     private AiConnectionTester? _aiConnectionTester;
     private readonly AiOperationCoordinator _aiOperations = new();
+    private readonly SemaphoreSlim _aiSettingsSaveGate = new(1, 1);
     private FocusModeService? _focusMode;
     private SqlitePetStateStore? _petStateStore;
     private IPetRuntimeLifecycle? _runtimeLifecycle;
@@ -326,15 +327,38 @@ public partial class App : System.Windows.Application
             normalized,
             Environment.ProcessPath
                 ?? throw new InvalidOperationException("无法确定 Honey.exe 路径。"),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         _settings = normalized;
-        _overlayWindow?.ApplySettings(normalized);
-        _trayIcon?.SetFocusMode(normalized.FocusMode);
-        _overlayWindow?.SetFocusActive(
-            normalized.FocusMode && (_focusMode?.IsFocusModeActive ?? false));
+        if (!IsShuttingDown()
+            && !Dispatcher.HasShutdownStarted
+            && !Dispatcher.HasShutdownFinished)
+        {
+            _ = Dispatcher.BeginInvoke(() =>
+            {
+                if (IsShuttingDown())
+                {
+                    return;
+                }
+
+                _overlayWindow?.ApplySettings(normalized);
+                _trayIcon?.SetFocusMode(normalized.FocusMode);
+                _overlayWindow?.SetFocusActive(
+                    normalized.FocusMode && (_focusMode?.IsFocusModeActive ?? false));
+            });
+        }
     }
 
     private async Task ApplyAiSettingsAsync(
+        AiSettingsSubmission submission,
+        CancellationToken cancellationToken)
+    {
+        await _aiOperations.RunAsync(
+                token => ApplyAiSettingsCoreAsync(submission, token),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<bool> ApplyAiSettingsCoreAsync(
         AiSettingsSubmission submission,
         CancellationToken cancellationToken)
     {
@@ -343,14 +367,28 @@ public partial class App : System.Windows.Application
             throw new InvalidOperationException("安全密钥存储尚未初始化。");
         }
 
-        var coordinator = new AiSettingsSaveCoordinator(
-            _secretStore,
-            ApplySettingsAsync);
-        var result = await coordinator.ApplyAsync(
-            _aiSecret,
-            submission,
-            cancellationToken);
-        _aiSecret = result.Secret;
+        if (!await _aiSettingsSaveGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("AI 设置正在保存，请稍候。");
+        }
+
+        try
+        {
+            var coordinator = new AiSettingsSaveCoordinator(
+                _secretStore,
+                ApplySettingsAsync);
+            var result = await coordinator.ApplyAsync(
+                    _aiSecret,
+                    submission,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            _aiSecret = result.Secret;
+            return true;
+        }
+        finally
+        {
+            _aiSettingsSaveGate.Release();
+        }
     }
 
     private async Task<string> TestAiConnectionAsync(
@@ -402,7 +440,7 @@ public partial class App : System.Windows.Application
                     "请用一句简短中文回应连接测试。",
                     "情绪：平静；形态：常态；行为：观察；需求：均衡",
                     []),
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             return result.Available
                 ? "连接成功，AI 个性增强可用。"
                 : $"连接未成功：{FailureMessage(result.FailureCode)}";
@@ -479,7 +517,7 @@ public partial class App : System.Windows.Application
                     Trace.TraceInformation("AI 建议因技能冷却或运行状态被忽略。");
                 }
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         if (IsShuttingDown()
             || !ReferenceEquals(_overlayWindow, overlay)
             || Dispatcher.HasShutdownStarted

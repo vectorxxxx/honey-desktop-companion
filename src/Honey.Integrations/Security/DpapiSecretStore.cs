@@ -107,13 +107,14 @@ public sealed class DpapiSecretStore : IAiSecretStore
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(secret);
-        await SavePayloadAsync(JsonSerializer.Serialize(secret), cancellationToken);
+        await SavePayloadAsync(JsonSerializer.Serialize(secret), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task SavePayloadAsync(string secret, CancellationToken cancellationToken)
     {
         var cipherText = Protect(secret);
-        await _gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -123,7 +124,7 @@ public sealed class DpapiSecretStore : IAiSecretStore
             var temporary = $"{_path}.{Guid.NewGuid():N}.tmp";
             try
             {
-                await using (var stream = new FileStream(
+                using (var stream = new FileStream(
                     temporary,
                     FileMode.CreateNew,
                     FileAccess.Write,
@@ -134,8 +135,8 @@ public sealed class DpapiSecretStore : IAiSecretStore
                     await JsonSerializer.SerializeAsync(
                         stream,
                         new SecretFile(CurrentVersion, cipherText),
-                        cancellationToken: cancellationToken);
-                    await stream.FlushAsync(cancellationToken);
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                     stream.Flush(flushToDisk: true);
                 }
 
@@ -158,7 +159,7 @@ public sealed class DpapiSecretStore : IAiSecretStore
 
     public async Task<BoundAiSecret?> LoadBoundAsync(CancellationToken cancellationToken = default)
     {
-        var payload = await LoadPayloadAsync(cancellationToken);
+        var payload = await LoadPayloadAsync(cancellationToken).ConfigureAwait(false);
         if (payload is null)
         {
             return null;
@@ -177,7 +178,7 @@ public sealed class DpapiSecretStore : IAiSecretStore
 
     private async Task<string?> LoadPayloadAsync(CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -186,7 +187,7 @@ public sealed class DpapiSecretStore : IAiSecretStore
                 return null;
             }
 
-            await using var stream = new FileStream(
+            using var stream = new FileStream(
                 _path,
                 FileMode.Open,
                 FileAccess.Read,
@@ -195,7 +196,7 @@ public sealed class DpapiSecretStore : IAiSecretStore
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             var file = await JsonSerializer.DeserializeAsync<SecretFile>(
                 stream,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             if (file is null || file.Version != CurrentVersion)
             {
                 throw new InvalidDataException("秘密文件版本无效。");
@@ -211,7 +212,7 @@ public sealed class DpapiSecretStore : IAiSecretStore
 
     public async Task DeleteAsync(CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();

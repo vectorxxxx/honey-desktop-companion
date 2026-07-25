@@ -58,14 +58,17 @@ public sealed class OpenAiCompatibleProvider : IAiCompanionProvider
             using var response = await _client.SendAsync(
                 message,
                 HttpCompletionOption.ResponseHeadersRead,
-                linked.Token);
+                linked.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 return Failure(MapStatusCode(response.StatusCode));
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(linked.Token);
-            var bytes = await ReadLimitedAsync(stream, MaximumResponseBytes, linked.Token);
+            using var stream = await response.Content
+                .ReadAsStreamAsync(linked.Token)
+                .ConfigureAwait(false);
+            var bytes = await ReadLimitedAsync(stream, MaximumResponseBytes, linked.Token)
+                .ConfigureAwait(false);
             if (bytes is null)
             {
                 return Failure("response_too_large");
@@ -208,7 +211,8 @@ public sealed class OpenAiCompatibleProvider : IAiCompanionProvider
         var chunk = new byte[8192];
         while (true)
         {
-            var read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken);
+            var read = await stream.ReadAsync(chunk.AsMemory(), cancellationToken)
+                .ConfigureAwait(false);
             if (read == 0)
             {
                 return buffer.ToArray();
@@ -219,7 +223,8 @@ public sealed class OpenAiCompatibleProvider : IAiCompanionProvider
                 return null;
             }
 
-            await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
+            await buffer.WriteAsync(chunk.AsMemory(0, read), cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 

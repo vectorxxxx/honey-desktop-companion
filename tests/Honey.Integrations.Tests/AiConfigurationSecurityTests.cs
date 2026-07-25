@@ -45,5 +45,11 @@ public sealed class AiConfigurationSecurityTests
             true, "https://example.com/v1", "other", "binding-a", secret).Available);
         Assert.False(AiConfigurationResolver.Resolve(
             true, "https://example.com/v1", "model", "binding-b", secret).Available);
+        Assert.False(AiConfigurationResolver.Resolve(
+            true,
+            "https://example.com/v1",
+            "model",
+            "binding-a",
+            secret with { ApiKey = " " }).Available);
     }
 }

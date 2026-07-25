@@ -18,14 +18,14 @@ public sealed class SettingsApplicationCoordinator(
         try
         {
             ApplyAutoStart(next.StartWithWindows, executablePath);
-            await persistence.SaveAsync(next, cancellationToken);
+            await persistence.SaveAsync(next, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception original)
         {
             TryCompensate(() => ApplyAutoStart(wasEnabled, executablePath), original, "AutoStart");
             try
             {
-                await persistence.SaveAsync(previous, CancellationToken.None);
+                await persistence.SaveAsync(previous, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception compensation)
             {
