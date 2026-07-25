@@ -90,6 +90,54 @@ public sealed class WhiteJadeSpiderSceneTests
         Assert.All(pose.Legs, leg => Assert.True(hitMap.Contains(leg.Knee.X, leg.Knee.Y)));
     }
 
+    [Fact]
+    public void Draw_觅食玩耍与扑跃具有可辨识像素演出()
+    {
+        using var scene = new WhiteJadeSpiderScene();
+        using var forage = Render(scene, Snapshot(PetMode.Normal) with
+        {
+            Behavior = "forage", Phase = "发现灵蝶", PhaseProgress = 0.5
+        });
+        using var play = Render(scene, Snapshot(PetMode.Normal) with
+        {
+            Behavior = "play", Phase = "丝球弹跳", PhaseProgress = 0.5
+        });
+        using var pounce = Render(scene, Snapshot(PetMode.Normal) with
+        {
+            Behavior = "pounce", Phase = "短跳", PhaseProgress = 0.5
+        });
+        using var web = Render(scene, Snapshot(PetMode.Normal) with
+        {
+            Behavior = "web", Phase = "往返织网", PhaseProgress = 0.65, SkillProgress = 0.55
+        });
+        using var sleep = Render(scene, Snapshot(PetMode.Normal) with
+        {
+            Behavior = "sleep", Phase = "呼吸光", PhaseProgress = 0.65
+        });
+
+        Assert.True(CountDifferentPixels(forage, play) > 50);
+        Assert.True(CountDifferentPixels(play, pounce) > 50);
+        SavePreview(forage, "forage-preview.png");
+        SavePreview(web, "web-preview.png");
+        SavePreview(play, "play-preview.png");
+        SavePreview(pounce, "pounce-preview.png");
+        SavePreview(sleep, "sleep-preview.png");
+    }
+
+    [Fact]
+    public void Draw_织网技能随总进度逐步增加丝线()
+    {
+        using var scene = new WhiteJadeSpiderScene();
+        var baseSnapshot = Snapshot(PetMode.Normal) with
+        {
+            Behavior = "web", Phase = "往返织网", PhaseProgress = 0.5
+        };
+        using var early = Render(scene, baseSnapshot with { SkillProgress = 0.15 });
+        using var late = Render(scene, baseSnapshot with { SkillProgress = 0.9 });
+
+        Assert.True(CountOpaque(late) > CountOpaque(early) + 40);
+    }
+
     private static RenderSnapshot Snapshot(PetMode mode, double time = 1.25) =>
         new(mode, PetMood.Curious, 0.35f, -0.2f, time, 1, "observe");
 

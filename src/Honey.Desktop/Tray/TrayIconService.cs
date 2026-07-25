@@ -53,6 +53,22 @@ public sealed class TrayIconService : IDisposable
     public event EventHandler? SettingsRequested;
     public event EventHandler? ExitRequested;
 
+    public void SetPaused(bool paused)
+    {
+        if (_pausedItem.Checked != paused)
+        {
+            _pausedItem.Checked = paused;
+        }
+    }
+
+    public void SetFocusMode(bool enabled)
+    {
+        if (_focusItem.Checked != enabled)
+        {
+            _focusItem.Checked = enabled;
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)

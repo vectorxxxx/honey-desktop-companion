@@ -53,7 +53,17 @@ public sealed class WebScene : IDisposable
             right - bounds.Width * 0.05f,
             top + bounds.Height * 0.28f);
         using var path = builder.Detach();
-        canvas.DrawPath(path, _paint);
+        using var visibleBuilder = new SKPathBuilder();
+        using var measure = new SKPathMeasure(path, false);
+        var progress = (float)Math.Clamp(safe.SkillProgress, 0, 1);
+        do
+        {
+            measure.GetSegment(0, measure.Length * progress, visibleBuilder, true);
+        }
+        while (measure.NextContour());
+
+        using var visiblePath = visibleBuilder.Detach();
+        canvas.DrawPath(visiblePath, _paint);
     }
 
     public void Dispose()

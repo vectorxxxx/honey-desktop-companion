@@ -36,6 +36,12 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
     private readonly SKPaint _bodyPaint = new() { IsAntialias = true };
     private readonly SKPaint _socketPaint = new() { IsAntialias = true };
     private readonly SKPaint _irisPaint = new() { IsAntialias = true };
+    private readonly SKPaint _skillPaint = new()
+    {
+        IsAntialias = true,
+        StrokeCap = SKStrokeCap.Round,
+        StrokeJoin = SKStrokeJoin.Round
+    };
     private int _disposed;
 
     public void Draw(SKCanvas canvas, RenderSnapshot snapshot)
@@ -109,12 +115,80 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
     {
         canvas.Save();
         canvas.Translate(offsetX, offsetY);
+        DrawSkillProps(canvas, pose, safe);
         DrawParticles(canvas, pose, safe);
         _webScene.Draw(canvas, new SKRect(0, 0, bounds.Width, bounds.Height), safe);
         DrawLegs(canvas, pose, safe);
         DrawBody(canvas, pose, safe);
         DrawEyes(canvas, pose, safe);
         canvas.Restore();
+    }
+
+    private void DrawSkillProps(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
+    {
+        var jade = snapshot.Mode == PetMode.Berserk
+            ? new SKColor(244, 67, 64, 210)
+            : new SKColor(176, 248, 234, 210);
+        _skillPaint.Color = jade;
+        _skillPaint.StrokeWidth = Math.Max(1.5f, pose.DeviceScale * 2);
+        _skillPaint.Style = SKPaintStyle.Stroke;
+        var progress = (float)snapshot.PhaseProgress;
+        switch (snapshot.Behavior)
+        {
+            case "forage":
+            {
+                var x = pose.Center.X + pose.Abdomen.Width * (0.7f + progress * 0.25f);
+                var y = pose.Center.Y - pose.Abdomen.Height * (0.65f + MathF.Sin(progress * MathF.PI) * 0.2f);
+                canvas.DrawLine(x, y, x - 9 * pose.DeviceScale, y - 7 * pose.DeviceScale, _skillPaint);
+                canvas.DrawLine(x, y, x + 9 * pose.DeviceScale, y - 7 * pose.DeviceScale, _skillPaint);
+                canvas.DrawCircle(x, y, 2.2f * pose.DeviceScale, _skillPaint);
+                break;
+            }
+            case "play":
+            {
+                var bounce = MathF.Sin(progress * MathF.PI);
+                var x = pose.Center.X + pose.Abdomen.Width * 0.62f;
+                var y = pose.Center.Y + pose.Abdomen.Height * (0.45f - bounce * 0.75f);
+                _skillPaint.Style = SKPaintStyle.Fill;
+                canvas.DrawCircle(x, y, 8 * pose.DeviceScale, _skillPaint);
+                _skillPaint.Style = SKPaintStyle.Stroke;
+                canvas.DrawArc(
+                    new SKRect(x - 11, y - 11, x + 11, y + 11),
+                    20, 230, false, _skillPaint);
+                break;
+            }
+            case "pounce":
+            {
+                var length = pose.Abdomen.Width * (0.25f + progress * 0.45f);
+                for (var index = -1; index <= 1; index++)
+                {
+                    var y = pose.Center.Y + index * 9 * pose.DeviceScale;
+                    canvas.DrawLine(
+                        pose.Abdomen.Left - length,
+                        y,
+                        pose.Abdomen.Left - length * 0.25f,
+                        y,
+                        _skillPaint);
+                }
+                break;
+            }
+            case "groom":
+                canvas.DrawArc(pose.Head, 190 + progress * 35, 48, false, _skillPaint);
+                canvas.DrawArc(pose.Head, 302 - progress * 35, 48, false, _skillPaint);
+                break;
+            case "sleep":
+            {
+                _skillPaint.Color = jade.WithAlpha((byte)(80 + progress * 110));
+                canvas.DrawOval(
+                    new SKRect(
+                        pose.Abdomen.Left - 12,
+                        pose.Abdomen.Top - 12,
+                        pose.Abdomen.Right + 12,
+                        pose.Abdomen.Bottom + 12),
+                    _skillPaint);
+                break;
+            }
+        }
     }
 
     private void DrawParticles(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
@@ -271,6 +345,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         _bodyPaint.Dispose();
         _socketPaint.Dispose();
         _irisPaint.Dispose();
+        _skillPaint.Dispose();
     }
 
     private void ThrowIfDisposed() =>

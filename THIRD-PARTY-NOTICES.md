@@ -2,7 +2,7 @@
 
 ## Lucide 图标
 
-Honey 的桌面环形菜单使用并按界面尺寸改编了 Lucide 的 Heart、Pause、Play、Moon、Zap 与 X 线性图标路径。Lucide 项目采用 ISC License。本项目与 Lucide 官方不存在背书或隶属关系。
+Honey 的桌面环形菜单与设置界面使用并按界面尺寸改编了 Lucide 的 Heart、Pause、Play、Moon、Zap、X、Settings、Sparkles、Monitor、Brain、Save 与 RotateCcw 线性图标路径。Lucide 项目采用 ISC License。本项目与 Lucide 官方不存在背书或隶属关系。
 
 以下许可原文按法律文本原样保留：
 
