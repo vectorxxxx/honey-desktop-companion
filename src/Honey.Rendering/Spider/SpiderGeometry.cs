@@ -6,6 +6,7 @@ namespace Honey.Rendering.Spider;
 public sealed record SpiderPose(
     float ViewportWidth,
     float ViewportHeight,
+    float DeviceScale,
     SKPoint Center,
     SKRect Abdomen,
     SKRect Head,
@@ -14,11 +15,16 @@ public sealed record SpiderPose(
 
 public static class SpiderGeometry
 {
-    public static SpiderPose CreatePose(float width, float height, RenderSnapshot snapshot)
+    public static SpiderPose CreatePose(
+        float width,
+        float height,
+        RenderSnapshot snapshot,
+        float deviceScale = 1)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var safe = snapshot.Normalize();
-        var layout = SpiderLayout.Create(width, height, safe.Scale);
+        var safeDeviceScale = SpiderViewportMetrics.NormalizeDeviceScale(deviceScale);
+        var layout = SpiderLayout.Create(width, height, safe.Scale, safeDeviceScale);
         var cadence = safe.Mode == PetMode.Berserk ? 5.4 : 3.1;
         var moodAmplitude = safe.Mood switch
         {
@@ -43,6 +49,7 @@ public static class SpiderGeometry
         return new SpiderPose(
             width,
             height,
+            safeDeviceScale,
             layout.Center,
             layout.Abdomen,
             layout.Head,

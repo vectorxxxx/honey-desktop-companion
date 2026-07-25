@@ -48,21 +48,23 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             return;
         }
 
-        Draw(canvas, snapshot, clip.Width, clip.Height, clip.Left, clip.Top);
+        Draw(canvas, snapshot, clip.Width, clip.Height, 1, clip.Left, clip.Top);
     }
 
     public void Draw(
         SKCanvas canvas,
         RenderSnapshot snapshot,
         float viewportWidth,
-        float viewportHeight) =>
-        Draw(canvas, snapshot, viewportWidth, viewportHeight, 0, 0);
+        float viewportHeight,
+        float deviceScale = 1) =>
+        Draw(canvas, snapshot, viewportWidth, viewportHeight, deviceScale, 0, 0);
 
     private void Draw(
         SKCanvas canvas,
         RenderSnapshot snapshot,
         float viewportWidth,
         float viewportHeight,
+        float deviceScale,
         float offsetX,
         float offsetY)
     {
@@ -78,7 +80,11 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         }
 
         var bounds = new SKRect(0, 0, viewportWidth, viewportHeight);
-        var pose = SpiderGeometry.CreatePose(bounds.Width, bounds.Height, safe);
+        var pose = SpiderGeometry.CreatePose(
+            bounds.Width,
+            bounds.Height,
+            safe,
+            deviceScale);
         DrawPose(canvas, safe, pose, bounds, offsetX, offsetY);
     }
 
@@ -127,7 +133,11 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             var pulse = 0.55f + 0.45f * MathF.Sin((float)phase);
             _particlePaint.Color =
                 baseColor.WithAlpha((byte)(baseColor.Alpha * Math.Clamp(pulse, 0.15f, 1)));
-            canvas.DrawCircle(x, y, 1.2f + index % 3 * 0.45f, _particlePaint);
+            canvas.DrawCircle(
+                x,
+                y,
+                (1.2f + index % 3 * 0.45f) * pose.DeviceScale,
+                _particlePaint);
         }
     }
 

@@ -11,12 +11,8 @@ public sealed class PointerInteractionFinalizer
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
     }
 
-    public bool Complete(PixelPoint pointer)
-    {
-        var wasDragging = _controller.IsDragging;
-        _controller.End(pointer);
-        return wasDragging;
-    }
+    public bool Complete(PixelPoint pointer) =>
+        _controller.End(pointer).WasDragging;
 
     public bool Cancel() => _controller.Cancel();
 }

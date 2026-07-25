@@ -60,7 +60,10 @@ public partial class OverlayWindow : Window
             (float)initial.Scale,
             BuiltInBehaviorKeys.Observe).Normalize();
         _pauseCoordinator = new PauseCoordinator(
-            paused => AutonomousMovementPaused?.Invoke(paused),
+            paused => SafeEventDispatcher.Publish(
+                AutonomousMovementPaused,
+                paused,
+                ReportInputError),
             ReportInputError);
         _interactionController = new PetInteractionController(
             initial.PetId,
@@ -168,11 +171,20 @@ public partial class OverlayWindow : Window
         canvas.Clear(SKColors.Transparent);
         _canvasCoordinateWidth = e.Info.Width;
         _canvasCoordinateHeight = e.Info.Height;
+        var dpi = GetDpi();
+        var deviceScale = CanvasDensityResolver.Resolve(
+            e.Info.Width,
+            e.Info.Height,
+            SpiderCanvas.ActualWidth,
+            SpiderCanvas.ActualHeight,
+            dpi.DpiScaleX,
+            dpi.DpiScaleY);
         var current = Snapshot with { AnimationTime = _animationClock.Elapsed.TotalSeconds };
         var pose = SpiderGeometry.CreatePose(
             _canvasCoordinateWidth,
             _canvasCoordinateHeight,
-            current);
+            current,
+            deviceScale);
         _hitMap = SpiderHitMap.Create(pose);
         _scene.Draw(canvas, current, pose);
     }

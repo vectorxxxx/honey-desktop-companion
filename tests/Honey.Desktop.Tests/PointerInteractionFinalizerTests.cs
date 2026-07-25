@@ -38,4 +38,18 @@ public sealed class PointerInteractionFinalizerTests
         controller.Begin(new PixelPoint(0, 0), new PixelPoint(20, 20));
         Assert.False(finalizer.Complete(new PixelPoint(1, 1)));
     }
+
+    [Fact]
+    public void Complete_没有中间Move但最终点越阈值仍返回拖动()
+    {
+        var controller = new PetInteractionController(
+            Guid.NewGuid(),
+            _ => { },
+            _ => { },
+            dragThresholdPixels: 2);
+        var finalizer = new PointerInteractionFinalizer(controller);
+        controller.Begin(new PixelPoint(0, 0), new PixelPoint(20, 20));
+
+        Assert.True(finalizer.Complete(new PixelPoint(10, 10)));
+    }
 }

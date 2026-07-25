@@ -32,7 +32,8 @@ public sealed class SpiderHitMap
     public static SpiderHitMap CreateForSnapshot(
         float width,
         float height,
-        RenderSnapshot snapshot)
+        RenderSnapshot snapshot,
+        float deviceScale = 1)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         if (!float.IsFinite(width) || !float.IsFinite(height) || width <= 0 || height <= 0)
@@ -40,7 +41,8 @@ public sealed class SpiderHitMap
             return new SpiderHitMap(null);
         }
 
-        return new SpiderHitMap(SpiderGeometry.CreatePose(width, height, snapshot));
+        return new SpiderHitMap(
+            SpiderGeometry.CreatePose(width, height, snapshot, deviceScale));
     }
 
     public static SpiderHitMap Create(SpiderPose pose)

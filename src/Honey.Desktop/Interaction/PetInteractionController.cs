@@ -3,6 +3,10 @@ using Honey.Integrations.Windows;
 
 namespace Honey.Desktop.Interaction;
 
+public readonly record struct InteractionEndResult(
+    bool WasDragging,
+    bool InteractionOccurred);
+
 public sealed class PetInteractionController
 {
     private readonly Guid _petId;
@@ -80,24 +84,28 @@ public sealed class PetInteractionController
         }
     }
 
-    public void End(PixelPoint pointerScreen)
+    public InteractionEndResult End(PixelPoint pointerScreen)
     {
         if (!_pressed)
         {
-            return;
+            return default;
         }
 
         var wasDragging = IsDragging;
+        var interactionOccurred = false;
         try
         {
             Move(pointerScreen);
             wasDragging = IsDragging;
             if (!wasDragging)
             {
+                interactionOccurred = true;
                 SafeCallback.Invoke(
                     () => _interactionOccurred(new PetInteractionOccurred(_petId, "pet")),
                     _errorSink);
             }
+
+            return new InteractionEndResult(wasDragging, interactionOccurred);
         }
         finally
         {

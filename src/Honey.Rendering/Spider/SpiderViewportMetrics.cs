@@ -18,4 +18,9 @@ public static class SpiderViewportMetrics
         var side = Math.Max(MinimumViewport, MathF.Ceiling(radius * 2));
         return new SpiderViewportSize(side, side);
     }
+
+    public static float NormalizeDeviceScale(float deviceScale) =>
+        float.IsFinite(deviceScale) && deviceScale > 0
+            ? Math.Clamp(deviceScale, 0.5f, 4)
+            : 1;
 }

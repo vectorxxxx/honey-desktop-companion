@@ -10,11 +10,16 @@ public sealed record SpiderLayout(
     SKRect Head,
     IReadOnlyList<SpiderLeg> Legs)
 {
-    public static SpiderLayout Create(float width, float height, float scale)
+    public static SpiderLayout Create(
+        float width,
+        float height,
+        float scale,
+        float deviceScale = 1)
     {
         var safeScale = float.IsFinite(scale) && scale > 0 ? Math.Clamp(scale, 0.4f, 2f) : 1;
+        var safeDeviceScale = SpiderViewportMetrics.NormalizeDeviceScale(deviceScale);
         var center = new SKPoint(width / 2, height / 2);
-        var unit = SpiderViewportMetrics.CanonicalUnit * safeScale;
+        var unit = SpiderViewportMetrics.CanonicalUnit * safeScale * safeDeviceScale;
         var abdomen = SKRect.Create(
             center.X - unit * 0.58f,
             center.Y - unit * 0.72f,
@@ -39,7 +44,11 @@ public sealed record SpiderLayout(
                     center.X + side * unit * (1.48f + index * 0.08f),
                     y + (index - 1.5f) * unit * 0.32f);
                 legs[(side < 0 ? 0 : 4) + index] =
-                    new SpiderLeg(root, knee, tip, Math.Max(4, unit * 0.15f));
+                    new SpiderLeg(
+                        root,
+                        knee,
+                        tip,
+                        Math.Max(4 * safeDeviceScale, unit * 0.15f));
             }
         }
 
