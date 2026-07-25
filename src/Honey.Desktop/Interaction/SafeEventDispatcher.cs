@@ -2,9 +2,9 @@ namespace Honey.Desktop.Interaction;
 
 public static class SafeEventDispatcher
 {
-    public static void Publish(
-        Action<bool>? handlers,
-        bool value,
+    public static void Publish<T>(
+        Action<T>? handlers,
+        T value,
         Action<Exception>? errorSink = null)
     {
         if (handlers is null)
@@ -12,7 +12,7 @@ public static class SafeEventDispatcher
             return;
         }
 
-        foreach (var subscriber in handlers.GetInvocationList().Cast<Action<bool>>())
+        foreach (var subscriber in handlers.GetInvocationList().Cast<Action<T>>())
         {
             SafeCallback.Invoke(() => subscriber(value), errorSink);
         }

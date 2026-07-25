@@ -76,7 +76,10 @@ public partial class OverlayWindow : Window
             ReportInputError);
         _interactionController = new PetInteractionController(
             initial.PetId,
-            interaction => InteractionOccurred?.Invoke(interaction),
+            interaction => SafeEventDispatcher.Publish(
+                InteractionOccurred,
+                interaction,
+                ReportInputError),
             MoveWindowPhysical,
             paused => _pauseCoordinator.Set(PauseReason.Drag, paused),
             ReportInputError);
@@ -351,7 +354,10 @@ public partial class OverlayWindow : Window
     {
         Snapshot = Snapshot with { Mood = PetMood.Happy };
         SafeCallback.Invoke(
-            () => InteractionOccurred?.Invoke(new PetInteractionOccurred(_petId, "pet")),
+            () => SafeEventDispatcher.Publish(
+                InteractionOccurred,
+                new PetInteractionOccurred(_petId, "pet"),
+                ReportInputError),
             ReportInputError);
         SetMenuOpen(false);
     }

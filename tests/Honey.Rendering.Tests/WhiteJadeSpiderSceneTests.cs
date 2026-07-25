@@ -1,4 +1,5 @@
 using Honey.Domain.Model;
+using Honey.Domain.Behavior;
 using Honey.Rendering.Spider;
 using SkiaSharp;
 
@@ -96,23 +97,23 @@ public sealed class WhiteJadeSpiderSceneTests
         using var scene = new WhiteJadeSpiderScene();
         using var forage = Render(scene, Snapshot(PetMode.Normal) with
         {
-            Behavior = "forage", Phase = "发现灵蝶", PhaseProgress = 0.5
+            Behavior = "forage", Phase = BuiltInPhaseKeys.ForageDiscover, PhaseProgress = 0.5
         });
         using var play = Render(scene, Snapshot(PetMode.Normal) with
         {
-            Behavior = "play", Phase = "丝球弹跳", PhaseProgress = 0.5
+            Behavior = "play", Phase = BuiltInPhaseKeys.PlayBounce, PhaseProgress = 0.5
         });
         using var pounce = Render(scene, Snapshot(PetMode.Normal) with
         {
-            Behavior = "pounce", Phase = "短跳", PhaseProgress = 0.5
+            Behavior = "pounce", Phase = BuiltInPhaseKeys.PounceLeap, PhaseProgress = 0.5
         });
         using var web = Render(scene, Snapshot(PetMode.Normal) with
         {
-            Behavior = "web", Phase = "往返织网", PhaseProgress = 0.65, SkillProgress = 0.55
+            Behavior = "web", Phase = BuiltInPhaseKeys.WebWeave, PhaseProgress = 0.65, SkillProgress = 0.55
         });
         using var sleep = Render(scene, Snapshot(PetMode.Normal) with
         {
-            Behavior = "sleep", Phase = "呼吸光", PhaseProgress = 0.65
+            Behavior = "sleep", Phase = BuiltInPhaseKeys.SleepBreathe, PhaseProgress = 0.65
         });
 
         Assert.True(CountDifferentPixels(forage, play) > 50);
@@ -130,12 +131,42 @@ public sealed class WhiteJadeSpiderSceneTests
         using var scene = new WhiteJadeSpiderScene();
         var baseSnapshot = Snapshot(PetMode.Normal) with
         {
-            Behavior = "web", Phase = "往返织网", PhaseProgress = 0.5
+            Behavior = "web", Phase = BuiltInPhaseKeys.WebWeave
         };
-        using var early = Render(scene, baseSnapshot with { SkillProgress = 0.15 });
-        using var late = Render(scene, baseSnapshot with { SkillProgress = 0.9 });
+        using var early = Render(scene, baseSnapshot with { PhaseProgress = 0.15 });
+        using var late = Render(scene, baseSnapshot with { PhaseProgress = 0.9 });
 
         Assert.True(CountOpaque(late) > CountOpaque(early) + 40);
+    }
+
+    [Theory]
+    [InlineData("forage", BuiltInPhaseKeys.ForageDiscover, BuiltInPhaseKeys.ForageEat)]
+    [InlineData("web", BuiltInPhaseKeys.WebAnchor, BuiltInPhaseKeys.WebRest)]
+    [InlineData("play", BuiltInPhaseKeys.PlayBounce, BuiltInPhaseKeys.PlayChase)]
+    [InlineData("observe", BuiltInPhaseKeys.ObserveTurn, BuiltInPhaseKeys.ObserveTrack)]
+    [InlineData("pounce", BuiltInPhaseKeys.PounceCharge, BuiltInPhaseKeys.PounceRetreat)]
+    [InlineData("groom", BuiltInPhaseKeys.GroomStart, BuiltInPhaseKeys.GroomFinish)]
+    [InlineData("sleep", BuiltInPhaseKeys.SleepCurl, BuiltInPhaseKeys.SleepBreathe)]
+    public void Draw_七技能不同阶段产生明确像素差异(
+        string behavior,
+        string firstPhase,
+        string secondPhase)
+    {
+        using var scene = new WhiteJadeSpiderScene();
+        var snapshot = Snapshot(PetMode.Normal, 2.25) with
+        {
+            Behavior = behavior,
+            PhaseProgress = 0.55,
+            SkillProgress = 0.55
+        };
+        using var first = Render(scene, snapshot with { Phase = firstPhase });
+        using var second = Render(scene, snapshot with { Phase = secondPhase });
+
+        Assert.True(
+            CountDifferentPixels(first, second) > 40,
+            $"{behavior} 的 {firstPhase} 与 {secondPhase} 演出像素差异不足。");
+        SavePreview(first, $"{behavior}-{firstPhase}-preview.png");
+        SavePreview(second, $"{behavior}-{secondPhase}-preview.png");
     }
 
     private static RenderSnapshot Snapshot(PetMode mode, double time = 1.25) =>
@@ -186,7 +217,7 @@ public sealed class WhiteJadeSpiderSceneTests
 
     private static void SavePreview(SKBitmap bitmap, string fileName)
     {
-        var directory = Path.Combine(Path.GetTempPath(), "honey-task6-preview");
+        var directory = Path.Combine(Path.GetTempPath(), "honey-task7-stage-preview");
         Directory.CreateDirectory(directory);
         using var stream = File.Create(Path.Combine(directory, fileName));
         bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);

@@ -1,4 +1,5 @@
 using Honey.Domain.Model;
+using Honey.Domain.Behavior;
 using Honey.Rendering.Effects;
 using SkiaSharp;
 
@@ -135,60 +136,162 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         var progress = (float)snapshot.PhaseProgress;
         switch (snapshot.Behavior)
         {
-            case "forage":
+            case BuiltInBehaviorKeys.Forage:
             {
-                var x = pose.Center.X + pose.Abdomen.Width * (0.7f + progress * 0.25f);
-                var y = pose.Center.Y - pose.Abdomen.Height * (0.65f + MathF.Sin(progress * MathF.PI) * 0.2f);
-                canvas.DrawLine(x, y, x - 9 * pose.DeviceScale, y - 7 * pose.DeviceScale, _skillPaint);
-                canvas.DrawLine(x, y, x + 9 * pose.DeviceScale, y - 7 * pose.DeviceScale, _skillPaint);
-                canvas.DrawCircle(x, y, 2.2f * pose.DeviceScale, _skillPaint);
+                var approach = snapshot.Phase == BuiltInPhaseKeys.ForageApproach;
+                var capture = snapshot.Phase == BuiltInPhaseKeys.ForageCapture;
+                var eat = snapshot.Phase == BuiltInPhaseKeys.ForageEat;
+                var x = eat
+                    ? pose.Head.MidX
+                    : pose.Center.X + pose.Abdomen.Width
+                        * (approach ? 0.9f - progress * 0.42f : 0.9f);
+                var y = eat
+                    ? pose.Head.MidY
+                    : pose.Center.Y - pose.Abdomen.Height
+                        * (0.65f + MathF.Sin(progress * MathF.PI) * 0.2f);
+                if (capture)
+                {
+                    canvas.DrawCircle(x, y, (5 + progress * 13) * pose.DeviceScale, _skillPaint);
+                    canvas.DrawLine(pose.Head.MidX, pose.Head.MidY, x, y, _skillPaint);
+                }
+                else if (eat)
+                {
+                    _skillPaint.Style = SKPaintStyle.Fill;
+                    _skillPaint.Color = jade.WithAlpha((byte)(80 + 150 * progress));
+                    canvas.DrawCircle(x, y, (4 + progress * 5) * pose.DeviceScale, _skillPaint);
+                    _skillPaint.Style = SKPaintStyle.Stroke;
+                }
+                else
+                {
+                    DrawButterfly(canvas, x, y, pose.DeviceScale);
+                    if (approach)
+                    {
+                        canvas.DrawLine(pose.Head.MidX, pose.Head.MidY, x, y, _skillPaint);
+                    }
+                }
                 break;
             }
-            case "play":
+            case BuiltInBehaviorKeys.Web:
+                if (snapshot.Phase == BuiltInPhaseKeys.WebAnchor)
+                {
+                    canvas.DrawCircle(pose.Abdomen.Left, pose.Abdomen.Top, 5 * pose.DeviceScale, _skillPaint);
+                    canvas.DrawCircle(pose.Abdomen.Right, pose.Abdomen.Top, 5 * pose.DeviceScale, _skillPaint);
+                }
+                else if (snapshot.Phase == BuiltInPhaseKeys.WebRest)
+                {
+                    canvas.DrawLine(
+                        pose.Center.X,
+                        pose.Abdomen.Top - pose.Abdomen.Height * 0.8f,
+                        pose.Center.X,
+                        pose.Abdomen.Top,
+                        _skillPaint);
+                }
+                break;
+            case BuiltInBehaviorKeys.Play:
             {
-                var bounce = MathF.Sin(progress * MathF.PI);
-                var x = pose.Center.X + pose.Abdomen.Width * 0.62f;
-                var y = pose.Center.Y + pose.Abdomen.Height * (0.45f - bounce * 0.75f);
+                var chase = snapshot.Phase == BuiltInPhaseKeys.PlayChase;
+                var bounce = chase ? 0 : MathF.Sin(progress * MathF.PI);
+                var x = pose.Center.X + pose.Abdomen.Width
+                    * (chase ? -0.75f + progress * 1.5f : 0.62f);
+                var y = pose.Center.Y + pose.Abdomen.Height
+                    * (chase ? 0.55f : 0.45f - bounce * 0.75f);
                 _skillPaint.Style = SKPaintStyle.Fill;
                 canvas.DrawCircle(x, y, 8 * pose.DeviceScale, _skillPaint);
                 _skillPaint.Style = SKPaintStyle.Stroke;
-                canvas.DrawArc(
-                    new SKRect(x - 11, y - 11, x + 11, y + 11),
-                    20, 230, false, _skillPaint);
+                if (chase)
+                {
+                    canvas.DrawLine(x - 28 * pose.DeviceScale, y, x - 12 * pose.DeviceScale, y, _skillPaint);
+                }
+                else
+                {
+                    canvas.DrawArc(
+                        new SKRect(x - 11, y - 11, x + 11, y + 11),
+                        20, 230, false, _skillPaint);
+                }
                 break;
             }
-            case "pounce":
+            case BuiltInBehaviorKeys.Observe:
+                if (snapshot.Phase == BuiltInPhaseKeys.ObserveTurn)
+                {
+                    canvas.DrawArc(
+                        new SKRect(
+                            pose.Head.Left - 12,
+                            pose.Head.Top - 12,
+                            pose.Head.Right + 12,
+                            pose.Head.Bottom + 12),
+                        200,
+                        100 * progress,
+                        false,
+                        _skillPaint);
+                }
+                else
+                {
+                    var targetX = pose.Center.X + snapshot.LookX * pose.Abdomen.Width;
+                    var targetY = pose.Center.Y + snapshot.LookY * pose.Abdomen.Height;
+                    canvas.DrawLine(pose.Head.MidX, pose.Head.MidY, targetX, targetY, _skillPaint);
+                    canvas.DrawCircle(targetX, targetY, 4 * pose.DeviceScale, _skillPaint);
+                }
+                break;
+            case BuiltInBehaviorKeys.Pounce:
             {
+                var charge = snapshot.Phase == BuiltInPhaseKeys.PounceCharge;
+                var retreat = snapshot.Phase == BuiltInPhaseKeys.PounceRetreat;
+                if (charge)
+                {
+                    canvas.DrawOval(
+                        new SKRect(
+                            pose.Abdomen.Left - progress * 14,
+                            pose.Abdomen.Top + progress * 8,
+                            pose.Abdomen.Right + progress * 14,
+                            pose.Abdomen.Bottom - progress * 8),
+                        _skillPaint);
+                    break;
+                }
+
                 var length = pose.Abdomen.Width * (0.25f + progress * 0.45f);
+                var origin = retreat ? pose.Abdomen.Right : pose.Abdomen.Left;
+                var direction = retreat ? 1 : -1;
                 for (var index = -1; index <= 1; index++)
                 {
                     var y = pose.Center.Y + index * 9 * pose.DeviceScale;
                     canvas.DrawLine(
-                        pose.Abdomen.Left - length,
+                        origin + direction * length,
                         y,
-                        pose.Abdomen.Left - length * 0.25f,
+                        origin + direction * length * 0.25f,
                         y,
                         _skillPaint);
                 }
                 break;
             }
-            case "groom":
-                canvas.DrawArc(pose.Head, 190 + progress * 35, 48, false, _skillPaint);
-                canvas.DrawArc(pose.Head, 302 - progress * 35, 48, false, _skillPaint);
+            case BuiltInBehaviorKeys.Groom:
+                var finish = snapshot.Phase == BuiltInPhaseKeys.GroomFinish;
+                var alternate = snapshot.Phase == BuiltInPhaseKeys.GroomAlternate;
+                var offset = alternate ? MathF.Sin(progress * MathF.PI * 4) * 38 : finish ? 55 : 0;
+                canvas.DrawArc(pose.Head, 170 + offset, finish ? 24 : 58, false, _skillPaint);
+                canvas.DrawArc(pose.Head, 312 - offset, finish ? 24 : 58, false, _skillPaint);
                 break;
-            case "sleep":
+            case BuiltInBehaviorKeys.Sleep:
             {
+                var breathe = snapshot.Phase == BuiltInPhaseKeys.SleepBreathe;
                 _skillPaint.Color = jade.WithAlpha((byte)(80 + progress * 110));
+                var inset = breathe ? -12 - progress * 5 : 4 + progress * 13;
                 canvas.DrawOval(
                     new SKRect(
-                        pose.Abdomen.Left - 12,
-                        pose.Abdomen.Top - 12,
-                        pose.Abdomen.Right + 12,
-                        pose.Abdomen.Bottom + 12),
+                        pose.Abdomen.Left + inset,
+                        pose.Abdomen.Top + inset,
+                        pose.Abdomen.Right - inset,
+                        pose.Abdomen.Bottom - inset),
                     _skillPaint);
                 break;
             }
         }
+    }
+
+    private void DrawButterfly(SKCanvas canvas, float x, float y, float scale)
+    {
+        canvas.DrawLine(x, y, x - 9 * scale, y - 7 * scale, _skillPaint);
+        canvas.DrawLine(x, y, x + 9 * scale, y - 7 * scale, _skillPaint);
+        canvas.DrawCircle(x, y, 2.2f * scale, _skillPaint);
     }
 
     private void DrawParticles(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)

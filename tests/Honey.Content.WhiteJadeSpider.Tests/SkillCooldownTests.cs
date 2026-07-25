@@ -40,8 +40,66 @@ public sealed class SkillCooldownTests
         player.Start(skill);
         var frame = player.Advance(TimeSpan.FromSeconds(0.5));
 
-        Assert.Equal("短跳", frame.Phase);
+        Assert.Equal(BuiltInPhaseKeys.PounceLeap, frame.Phase);
         Assert.InRange(frame.Progress, 0, 1);
         Assert.False(frame.Completed);
+    }
+
+    [Fact]
+    public void SkillDefinition_拒绝非法区间冷却阶段与重复键()
+    {
+        var key = new BehaviorKey("test");
+        var phase = new SkillPhase("one", TimeSpan.FromSeconds(1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new SkillDefinition(key, TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.Zero, [phase]));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new SkillDefinition(key, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(1), TimeSpan.Zero, [phase]));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new SkillDefinition(key, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromTicks(-1), [phase]));
+        Assert.Throws<ArgumentException>(
+            () => new SkillDefinition(key, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.Zero, []));
+        Assert.Throws<ArgumentException>(
+            () => new SkillDefinition(key, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.Zero,
+                [new SkillPhase("same", TimeSpan.FromSeconds(0.5)), new SkillPhase("same", TimeSpan.FromSeconds(0.5))]));
+        Assert.Throws<ArgumentException>(
+            () => new SkillDefinition(new BehaviorKey(""), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.Zero, [phase]));
+        Assert.Throws<ArgumentException>(
+            () => new SkillDefinition(key, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3), TimeSpan.Zero, [phase]));
+        Assert.Throws<ArgumentException>(
+            () => new SkillDefinition(
+                key,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.MaxValue,
+                TimeSpan.Zero,
+                [
+                    new SkillPhase("huge-a", TimeSpan.MaxValue),
+                    new SkillPhase("huge-b", TimeSpan.MaxValue)
+                ]));
+    }
+
+    [Fact]
+    public void SkillPlayer_负时长拒绝而超大时长正确完成()
+    {
+        var skill = WhiteJadeSpiderSkills.All.Single(
+            item => item.Key == new BehaviorKey(BuiltInBehaviorKeys.Pounce));
+        var player = new SkillPlayer();
+        player.Start(skill);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => player.Advance(TimeSpan.FromTicks(-1)));
+        var completed = player.Advance(TimeSpan.MaxValue);
+
+        Assert.True(completed.Completed);
+        Assert.Equal(1, completed.TotalProgress);
+        Assert.False(player.IsPlaying);
+    }
+
+    [Fact]
+    public void CanStart_负间隔拒绝而最大间隔允许()
+    {
+        var skill = WhiteJadeSpiderSkills.All[0];
+        Assert.False(skill.CanStart(TimeSpan.FromTicks(-1)));
+        Assert.True(skill.CanStart(TimeSpan.MaxValue));
     }
 }

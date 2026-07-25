@@ -55,7 +55,15 @@ public sealed class WebScene : IDisposable
         using var path = builder.Detach();
         using var visibleBuilder = new SKPathBuilder();
         using var measure = new SKPathMeasure(path, false);
-        var progress = (float)Math.Clamp(safe.SkillProgress, 0, 1);
+        var phaseProgress = (float)Math.Clamp(safe.PhaseProgress, 0, 1);
+        var progress = safe.Phase switch
+        {
+            BuiltInPhaseKeys.WebAnchor => 0.05f + phaseProgress * 0.15f,
+            BuiltInPhaseKeys.WebSilk => 0.2f + phaseProgress * 0.15f,
+            BuiltInPhaseKeys.WebWeave => 0.35f + phaseProgress * 0.6f,
+            BuiltInPhaseKeys.WebRest => 1f,
+            _ => (float)Math.Clamp(safe.SkillProgress, 0, 1)
+        };
         do
         {
             measure.GetSegment(0, measure.Length * progress, visibleBuilder, true);

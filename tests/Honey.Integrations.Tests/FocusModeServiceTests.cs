@@ -34,4 +34,50 @@ public sealed class FocusModeServiceTests
         Assert.True(new FocusSnapshot(false, true, false, false).IsFocusModeActive);
         Assert.False(new FocusSnapshot(false, true, true, false).IsFocusModeActive);
     }
+
+    [Fact]
+    public void PollNow_活动状态后查询失败会通知一次安全降级()
+    {
+        var probe = new SequenceFocusProbe(
+            new FocusSnapshot(true, false, false, false),
+            new InvalidOperationException("Win32失败"),
+            new InvalidOperationException("仍失败"));
+        using var service = new FocusModeService(probe, Timeout.InfiniteTimeSpan);
+        var changes = new List<bool>();
+        service.Changed += (_, snapshot) => changes.Add(snapshot.IsFocusModeActive);
+
+        service.PollNow();
+        service.PollNow();
+        service.PollNow();
+
+        Assert.Equal([true, false], changes);
+        Assert.False(service.IsFocusModeActive);
+    }
+
+    [Fact]
+    public void PollNow_初始非活动查询失败不会产生多余通知()
+    {
+        using var service = new FocusModeService(
+            new SequenceFocusProbe(new InvalidOperationException("失败")),
+            Timeout.InfiniteTimeSpan);
+        var count = 0;
+        service.Changed += (_, _) => count++;
+
+        service.PollNow();
+
+        Assert.Equal(0, count);
+    }
+
+    private sealed class SequenceFocusProbe(params object[] results) : IFocusSnapshotProbe
+    {
+        private readonly Queue<object> _results = new(results);
+
+        public FocusSnapshot Capture(IReadOnlyCollection<nint> ownWindows)
+        {
+            var result = _results.Dequeue();
+            return result is Exception exception
+                ? throw exception
+                : (FocusSnapshot)result;
+        }
+    }
 }

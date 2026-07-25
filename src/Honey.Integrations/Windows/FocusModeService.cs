@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Microsoft.Win32;
 
 namespace Honey.Integrations.Windows;
@@ -19,20 +20,30 @@ public readonly record struct FocusSnapshot(
         (IsFullscreen || IsSessionLocked) && !IsOwnWindow && !IsShellWindow;
 }
 
+public interface IFocusSnapshotProbe
+{
+    FocusSnapshot Capture(IReadOnlyCollection<IntPtr> ownWindows);
+}
+
 public sealed class FocusModeService : IDisposable
 {
     private readonly HashSet<IntPtr> _ownWindows = [];
     private readonly Timer _timer;
+    private readonly IFocusSnapshotProbe _probe;
     private bool _disposed;
     private volatile bool _sessionLocked;
 
-    public FocusModeService(TimeSpan? pollInterval = null)
+    public FocusModeService(
+        IFocusSnapshotProbe? probe = null,
+        TimeSpan? pollInterval = null)
     {
+        _probe = probe ?? new NativeFocusSnapshotProbe(() => _sessionLocked);
+        var interval = pollInterval ?? TimeSpan.FromSeconds(1);
         _timer = new Timer(
-            _ => PollSafely(),
+            _ => PollNow(),
             null,
-            pollInterval ?? TimeSpan.FromSeconds(1),
-            pollInterval ?? TimeSpan.FromSeconds(1));
+            interval,
+            interval);
         SystemEvents.SessionSwitch += OnSessionSwitch;
     }
 
@@ -62,6 +73,25 @@ public sealed class FocusModeService : IDisposable
     public static bool Evaluate(bool fullscreenOrLocked, bool ownWindow, bool shellWindow) =>
         fullscreenOrLocked && !ownWindow && !shellWindow;
 
+    public void PollNow()
+    {
+        try
+        {
+            IntPtr[] ownWindows;
+            lock (_ownWindows)
+            {
+                ownWindows = [.. _ownWindows];
+            }
+
+            UpdateSnapshot(_probe.Capture(ownWindows));
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("专注模式前台窗口查询失败：{0}", exception);
+            UpdateSnapshot(default);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -74,34 +104,12 @@ public sealed class FocusModeService : IDisposable
         _timer.Dispose();
     }
 
-    private void PollSafely()
+    private void UpdateSnapshot(FocusSnapshot next)
     {
-        try
+        if (next != Snapshot)
         {
-            var foreground = GetForegroundWindow();
-            var shell = GetShellWindow();
-            var own = false;
-            lock (_ownWindows)
-            {
-                own = _ownWindows.Contains(foreground);
-            }
-
-            var fullscreen = TryGetWindowRect(foreground, out var window)
-                && MonitorFromWindow(foreground, MonitorDefaultToNearest) is var monitor
-                && monitor != IntPtr.Zero
-                && TryGetMonitorBounds(monitor, out var bounds)
-                && IsFullscreen(window, bounds);
-            var next = new FocusSnapshot(fullscreen, _sessionLocked, own, foreground == shell);
-            if (next != Snapshot)
-            {
-                Snapshot = next;
-                Changed?.Invoke(this, next);
-            }
-        }
-        catch
-        {
-            // Win32 查询失败时安全退化为非专注状态。
-            Snapshot = default;
+            Snapshot = next;
+            Changed?.Invoke(this, next);
         }
     }
 
@@ -115,6 +123,35 @@ public sealed class FocusModeService : IDisposable
         {
             _sessionLocked = false;
         }
+    }
+
+}
+
+internal sealed class NativeFocusSnapshotProbe(
+    Func<bool> sessionLocked) : IFocusSnapshotProbe
+{
+    public FocusSnapshot Capture(IReadOnlyCollection<IntPtr> ownWindows)
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("无法获取前台窗口。");
+        }
+
+        var shell = GetShellWindow();
+        var monitor = MonitorFromWindow(foreground, MonitorDefaultToNearest);
+        if (!TryGetWindowRect(foreground, out var window)
+            || monitor == IntPtr.Zero
+            || !TryGetMonitorBounds(monitor, out var bounds))
+        {
+            throw new InvalidOperationException("无法读取前台窗口或显示器边界。");
+        }
+
+        return new FocusSnapshot(
+            FocusModeService.IsFullscreen(window, bounds),
+            sessionLocked(),
+            ownWindows.Contains(foreground),
+            foreground == shell);
     }
 
     private static bool TryGetWindowRect(IntPtr handle, out WindowBounds bounds)
