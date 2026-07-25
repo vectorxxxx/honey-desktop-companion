@@ -14,13 +14,12 @@ public sealed class UtilityIntentSelector
 
         var availableCandidates = candidates
             .Where(candidate => candidate.CooldownRemaining <= TimeSpan.Zero)
-            .Select(candidate => candidate with
+            .Select(candidate => new
             {
-                Utility = candidate.Utility
-                    - (previous == candidate.Key ? 0.15 : 0)
-                    + Math.Clamp(random01, 0, 1) * 0.03
+                Candidate = candidate,
+                Score = candidate.Utility - (previous == candidate.Key ? 0.15 : 0)
             })
-            .OrderByDescending(candidate => candidate.Utility)
+            .OrderByDescending(candidate => candidate.Score)
             .ToArray();
 
         if (availableCandidates.Length == 0)
@@ -28,6 +27,17 @@ public sealed class UtilityIntentSelector
             throw new InvalidOperationException("没有可用意图。");
         }
 
-        return availableCandidates[0];
+        const double closeScoreRange = 0.03;
+        var randomFactor = Math.Clamp(random01, 0, 1);
+        var topCandidate = availableCandidates[0];
+
+        if (availableCandidates.Length > 1
+            && topCandidate.Score - availableCandidates[1].Score <= closeScoreRange
+            && randomFactor >= 0.5)
+        {
+            return availableCandidates[1].Candidate;
+        }
+
+        return topCandidate.Candidate;
     }
 }

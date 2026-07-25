@@ -48,13 +48,30 @@ public sealed class UtilityIntentSelectorTests
     }
 
     [Fact]
-    public void Select_ClampsRandomFactorToOne()
+    public void Select_UsesClampedRandomFactorToChooseBetweenCloseCandidates()
+    {
+        var selector = new UtilityIntentSelector();
+        var candidates = new[]
+        {
+            new IntentCandidate(new("feed"), 0.80, TimeSpan.Zero),
+            new IntentCandidate(new("play"), 0.78, TimeSpan.Zero)
+        };
+
+        var selectedWithLowRandom = selector.Select(candidates, previous: null, random01: -10);
+        var selectedWithHighRandom = selector.Select(candidates, previous: null, random01: 10);
+
+        Assert.Equal(new BehaviorKey("feed"), selectedWithLowRandom.Key);
+        Assert.Equal(new BehaviorKey("play"), selectedWithHighRandom.Key);
+    }
+
+    [Fact]
+    public void Select_ReturnsOriginalCandidateData()
     {
         var selector = new UtilityIntentSelector();
         var candidate = new IntentCandidate(new("feed"), 0.5, TimeSpan.Zero);
 
-        var selected = selector.Select([candidate], previous: null, random01: 2);
+        var selected = selector.Select([candidate], previous: null, random01: 1);
 
-        Assert.Equal(0.53, selected.Utility, precision: 10);
+        Assert.Equal(candidate, selected);
     }
 }
