@@ -14,7 +14,9 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
 
     private readonly Mutex _mutex;
     private readonly CancellationTokenSource _stopSource = new();
+    private readonly object _disposeSync = new();
     private Task? _listenerTask;
+    private Task? _disposeTask;
 
     public SingleInstanceCoordinator()
     {
@@ -67,22 +69,13 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        await _stopSource.CancelAsync().ConfigureAwait(false);
-        if (_listenerTask is not null)
+        lock (_disposeSync)
         {
-            try
-            {
-                await _listenerTask.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-            }
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
         }
-
-        _stopSource.Dispose();
-        _mutex.Dispose();
     }
 
     private static async Task ListenAsync(
@@ -122,14 +115,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
 
                 if (SingleInstanceMessage.TryParse(buffer.AsSpan(0, bytesRead), out var command))
                 {
-                    try
-                    {
-                        await commandHandler(command).ConfigureAwait(false);
-                    }
-                    catch (Exception) when (!cancellationToken.IsCancellationRequested)
-                    {
-                        await DelayAfterFailure(cancellationToken).ConfigureAwait(false);
-                    }
+                    await commandHandler(command).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -159,6 +145,29 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        await _stopSource.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            if (_listenerTask is not null)
+            {
+                try
+                {
+                    await _listenerTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+        finally
+        {
+            _stopSource.Dispose();
+            _mutex.Dispose();
         }
     }
 }

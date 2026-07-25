@@ -70,7 +70,7 @@ public sealed class TrayIconService : IDisposable
     private static DrawingIcon LoadIcon()
     {
         var resource = WpfApplication.GetResourceStream(
-            new Uri("pack://application:,,,/Assets/Honey.ico"))
+            new Uri("/Honey.Desktop;component/Assets/Honey.ico", UriKind.Relative))
             ?? throw new InvalidOperationException("无法加载托盘图标 Assets/Honey.ico。");
         using (resource.Stream)
         using (var icon = new DrawingIcon(resource.Stream))

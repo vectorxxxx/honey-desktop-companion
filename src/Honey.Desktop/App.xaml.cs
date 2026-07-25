@@ -9,9 +9,10 @@ namespace Honey.Desktop;
 public partial class App : System.Windows.Application
 {
     private SingleInstanceCoordinator? _singleInstance;
+    private ShowCommandDispatcher? _showCommandDispatcher;
     private OverlayWindow? _overlayWindow;
     private TrayIconService? _trayIcon;
-    private bool _exitRequested;
+    private int _shuttingDown;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -28,6 +29,10 @@ public partial class App : System.Windows.Application
 
         var displayBounds = new DisplayBoundsService();
         _overlayWindow = new OverlayWindow(displayBounds, new OverlayHitTestPolicy());
+        _showCommandDispatcher = new ShowCommandDispatcher(
+            IsShuttingDown,
+            action => _ = Dispatcher.BeginInvoke(action),
+            () => _overlayWindow?.ShowAndActivate());
         MainWindow = _overlayWindow;
 
         _trayIcon = new TrayIconService();
@@ -45,9 +50,11 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Interlocked.Exchange(ref _shuttingDown, 1);
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _trayIcon?.Dispose();
         _trayIcon = null;
+        _showCommandDispatcher = null;
         _overlayWindow = null;
         if (_singleInstance is not null)
         {
@@ -60,12 +67,12 @@ public partial class App : System.Windows.Application
 
     private Task HandleSingleInstanceCommandAsync(SingleInstanceCommand command)
     {
-        if (command != SingleInstanceCommand.Show || _exitRequested)
+        if (command != SingleInstanceCommand.Show)
         {
             return Task.CompletedTask;
         }
 
-        return Dispatcher.InvokeAsync(() => _overlayWindow?.ShowAndActivate()).Task;
+        return _showCommandDispatcher?.Handle() ?? Task.CompletedTask;
     }
 
     private void OnVisibilityToggleRequested(object? sender, EventArgs e)
@@ -107,18 +114,23 @@ public partial class App : System.Windows.Application
 
     private void OnExitRequested(object? sender, EventArgs e)
     {
-        _exitRequested = true;
+        Interlocked.Exchange(ref _shuttingDown, 1);
         _overlayWindow?.CloseForExit();
         Shutdown();
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e)
     {
-        if (_exitRequested)
+        if (IsShuttingDown())
         {
             return;
         }
 
         _ = Dispatcher.InvokeAsync(() => _overlayWindow?.RestoreToVisibleWorkArea());
     }
+
+    private bool IsShuttingDown() =>
+        Volatile.Read(ref _shuttingDown) != 0
+        || Dispatcher.HasShutdownStarted
+        || Dispatcher.HasShutdownFinished;
 }
