@@ -56,11 +56,12 @@ public sealed class SqlitePetStateStoreTests
         using var database = new TemporaryDatabase();
         var store = new SqlitePetStateStore(database.Path);
         var petId = Guid.NewGuid();
+        const string corruptedJson = "{not-json}";
         await store.InitializeAsync(TestContext.Current.CancellationToken);
         await InsertRawStateAsync(
             database.Path,
             petId,
-            "{not-json}",
+            corruptedJson,
             "honey.white-jade-spider",
             new DateTimeOffset(2026, 7, 25, 12, 30, 0, TimeSpan.FromHours(8)));
 
@@ -69,6 +70,15 @@ public sealed class SqlitePetStateStoreTests
 
         Assert.Contains(petId.ToString(), exception.Message);
         Assert.NotNull(exception.InnerException);
+        var backup = Assert.Single(
+            Directory.EnumerateFiles(
+                System.IO.Path.GetDirectoryName(database.Path)!,
+                $"honey.db.pet-{petId:N}.corrupt-*.json"));
+        Assert.Contains(
+            corruptedJson,
+            await File.ReadAllTextAsync(
+                backup,
+                TestContext.Current.CancellationToken));
     }
 
     [Theory]

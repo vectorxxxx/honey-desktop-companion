@@ -7,7 +7,11 @@ public sealed class AutoStartServiceTests
     [Fact]
     public void Enable_写入带引号的后台启动命令()
     {
-        var executable = Path.Combine(Path.GetTempPath(), "Honey test", "Honey.exe");
+        var executable = Path.Combine(
+            Path.GetTempPath(),
+            "Honey.Tests",
+            Guid.NewGuid().ToString("N"),
+            "Honey.exe");
         var registry = new FakeRunRegistry();
         var service = new AutoStartService(registry, File.Exists);
 

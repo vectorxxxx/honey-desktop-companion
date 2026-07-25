@@ -1,6 +1,7 @@
 using System.Windows;
 using Honey.Desktop.SingleInstance;
 using Honey.Desktop.Settings;
+using Honey.Desktop.Runtime;
 using Honey.Desktop.Tray;
 using Honey.Content.WhiteJadeSpider;
 using Honey.Integrations.Windows;
@@ -20,11 +21,15 @@ public partial class App : System.Windows.Application
     private SettingsWindow? _settingsWindow;
     private SettingsStore? _settingsStore;
     private AutoStartService? _autoStart;
+    private SettingsApplicationCoordinator? _settingsCoordinator;
     private FocusModeService? _focusMode;
     private SqlitePetStateStore? _petStateStore;
+    private IDisposable? _overlayFocusLease;
+    private IDisposable? _settingsFocusLease;
     private AppSettings _settings = new();
     private System.Threading.Timer? _saveTimer;
     private int _shuttingDown;
+    private int _shutdownPrepared;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -42,24 +47,28 @@ public partial class App : System.Windows.Application
         var paths = new AppDataPaths();
         paths.EnsureDirectories();
         _settingsStore = new SettingsStore();
-        _settings = await _settingsStore.LoadAsync(CancellationToken.None);
-        _autoStart = new AutoStartService();
-        _focusMode = new FocusModeService();
-        _petStateStore = new SqlitePetStateStore(paths.DatabasePath);
-        var pack = new WhiteJadeSpiderPack();
-        var stablePetId = Guid.Parse("9f0e9f5a-7056-4ba4-92dc-706ef1401186");
-        var initial = pack.CreateInitialState(DateTimeOffset.UtcNow) with { PetId = stablePetId };
         try
         {
-            await _petStateStore.InitializeAsync(CancellationToken.None);
-            initial = await _petStateStore.LoadAsync(stablePetId, CancellationToken.None)
-                ?? initial;
+            _settings = await _settingsStore.LoadAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
-            Trace.TraceError("存档读取失败，原记录保持不变并创建新灵兽：{0}", exception);
-            initial = pack.CreateInitialState(DateTimeOffset.UtcNow);
+            Trace.TraceError("设置读取失败，使用内存默认值继续：{0}", exception);
+            _settings = new AppSettings();
         }
+        _autoStart = new AutoStartService();
+        _settingsCoordinator = new SettingsApplicationCoordinator(_settingsStore, _autoStart);
+        _focusMode = new FocusModeService();
+        _petStateStore = new SqlitePetStateStore(paths.DatabasePath);
+        var pack = new WhiteJadeSpiderPack();
+        var initial = await PetStateBootstrapper.LoadOrCreateAsync(
+            _petStateStore,
+            pack,
+            DateTimeOffset.UtcNow,
+            exception => Trace.TraceError(
+                "存档读取失败，原记录保持不变并以固定主宠继续：{0}",
+                exception),
+            CancellationToken.None);
 
         var displayBounds = new DisplayBoundsService();
         _overlayWindow = new OverlayWindow(
@@ -68,7 +77,20 @@ public partial class App : System.Windows.Application
             initial,
             _settings);
         _overlayWindow.UserPauseChanged += OnOverlayPauseChanged;
-        _focusMode.RegisterOwnWindow(new WindowInteropHelper(_overlayWindow).EnsureHandle());
+        _overlayWindow.PetCommandRequested += OnPetCommandRequested;
+        _overlayWindow.SkillCommandRequested += OnSkillCommandRequested;
+        _overlayWindow.ModeToggleRequested += OnModeToggleRequested;
+        _overlayWindow.SourceInitialized += (_, _) =>
+        {
+            _overlayFocusLease?.Dispose();
+            _overlayFocusLease = _focusMode?.RegisterOwnWindow(
+                new WindowInteropHelper(_overlayWindow).Handle);
+        };
+        _overlayWindow.Closed += (_, _) =>
+        {
+            _overlayFocusLease?.Dispose();
+            _overlayFocusLease = null;
+        };
         _showCommandDispatcher = new ShowCommandDispatcher(
             IsShuttingDown,
             action => _ = Dispatcher.BeginInvoke(action),
@@ -106,22 +128,9 @@ public partial class App : System.Windows.Application
     {
         Interlocked.Exchange(ref _shuttingDown, 1);
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        PrepareShutdownAsync().GetAwaiter().GetResult();
         _focusMode?.Dispose();
         _focusMode = null;
-        _saveTimer?.Dispose();
-        _saveTimer = null;
-        if (_overlayWindow is not null && _petStateStore is not null)
-        {
-            try
-            {
-                _petStateStore.SaveAsync(_overlayWindow.RuntimeState, CancellationToken.None)
-                    .GetAwaiter().GetResult();
-            }
-            catch (Exception exception)
-            {
-                Trace.TraceError("退出存档失败：{0}", exception);
-            }
-        }
 
         _settingsWindow = null;
         _trayIcon?.Dispose();
@@ -188,18 +197,30 @@ public partial class App : System.Windows.Application
         {
             Owner = _overlayWindow?.IsVisible == true ? _overlayWindow : null
         };
-        if (_focusMode is not null)
+        _settingsWindow.SourceInitialized += (_, _) =>
         {
-            _focusMode.RegisterOwnWindow(new WindowInteropHelper(_settingsWindow).EnsureHandle());
-        }
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            _settingsFocusLease?.Dispose();
+            _settingsFocusLease = _focusMode?.RegisterOwnWindow(
+                new WindowInteropHelper(_settingsWindow).Handle);
+        };
+        _settingsWindow.Closed += (_, _) =>
+        {
+            _settingsFocusLease?.Dispose();
+            _settingsFocusLease = null;
+            _settingsWindow = null;
+        };
         _settingsWindow.Show();
         _settingsWindow.Activate();
     }
 
-    private void OnExitRequested(object? sender, EventArgs e)
+    private async void OnExitRequested(object? sender, EventArgs e)
     {
-        Interlocked.Exchange(ref _shuttingDown, 1);
+        if (Interlocked.Exchange(ref _shuttingDown, 1) != 0)
+        {
+            return;
+        }
+
+        await PrepareShutdownAsync();
         _overlayWindow?.CloseForExit();
         Shutdown();
     }
@@ -224,21 +245,17 @@ public partial class App : System.Windows.Application
         CancellationToken cancellationToken)
     {
         var normalized = settings.Normalize();
-        if (normalized.StartWithWindows != _settings.StartWithWindows)
+        if (_settingsCoordinator is null)
         {
-            if (normalized.StartWithWindows)
-            {
-                _autoStart?.Enable(Environment.ProcessPath
-                    ?? throw new InvalidOperationException("无法确定 Honey.exe 路径。"));
-            }
-            else
-            {
-                _autoStart?.Disable();
-            }
+            throw new InvalidOperationException("设置协调器尚未初始化。");
         }
 
-        await (_settingsStore?.SaveAsync(normalized, cancellationToken)
-            ?? Task.CompletedTask);
+        await _settingsCoordinator.ApplyAsync(
+            _settings,
+            normalized,
+            Environment.ProcessPath
+                ?? throw new InvalidOperationException("无法确定 Honey.exe 路径。"),
+            cancellationToken);
         _settings = normalized;
         _overlayWindow?.ApplySettings(normalized);
         _trayIcon?.SetFocusMode(normalized.FocusMode);
@@ -267,6 +284,23 @@ public partial class App : System.Windows.Application
 
     private void OnOverlayPauseChanged(bool paused) => _trayIcon?.SetPaused(paused);
 
+    private void OnPetCommandRequested() => _overlayWindow?.RuntimeCommands.Pet();
+
+    private void OnSkillCommandRequested(Honey.Domain.Behavior.BehaviorKey key) =>
+        _overlayWindow?.RuntimeCommands.RequestSkill(key);
+
+    private void OnModeToggleRequested()
+    {
+        if (_overlayWindow is null)
+        {
+            return;
+        }
+
+        var preference = _overlayWindow.RuntimeCommands.ToggleMode();
+        _settings = _settings with { ModePreference = preference };
+        _ = SaveSettingsSafelyAsync();
+    }
+
     private async Task SavePetStateSafelyAsync()
     {
         try
@@ -282,5 +316,30 @@ public partial class App : System.Windows.Application
         {
             Trace.TraceError("周期存档失败：{0}", exception);
         }
+    }
+
+    private async Task PrepareShutdownAsync()
+    {
+        if (Interlocked.Exchange(ref _shutdownPrepared, 1) != 0)
+        {
+            return;
+        }
+
+        _saveTimer?.Dispose();
+        _saveTimer = null;
+        if (_overlayWindow is not null)
+        {
+            await _overlayWindow.StopRuntimeAsync();
+        }
+        _overlayFocusLease?.Dispose();
+        _overlayFocusLease = null;
+        _settingsFocusLease?.Dispose();
+        _settingsFocusLease = null;
+        if (_focusMode is not null)
+        {
+            await _focusMode.StopAsync();
+        }
+
+        await SavePetStateSafelyAsync();
     }
 }

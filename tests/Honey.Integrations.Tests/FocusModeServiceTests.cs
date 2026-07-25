@@ -32,7 +32,8 @@ public sealed class FocusModeServiceTests
     public void FocusSnapshot_锁屏会激活专注而自身窗口不会()
     {
         Assert.True(new FocusSnapshot(false, true, false, false).IsFocusModeActive);
-        Assert.False(new FocusSnapshot(false, true, true, false).IsFocusModeActive);
+        Assert.True(new FocusSnapshot(false, true, true, false).IsFocusModeActive);
+        Assert.True(new FocusSnapshot(false, true, false, true).IsFocusModeActive);
     }
 
     [Fact]
@@ -78,6 +79,75 @@ public sealed class FocusModeServiceTests
             return result is Exception exception
                 ? throw exception
                 : (FocusSnapshot)result;
+        }
+    }
+
+    [Fact]
+    public void CaptureLockedFirst_锁屏时不调用会失败的前台探针()
+    {
+        var calls = 0;
+        var snapshot = FocusProbePolicy.CaptureLockedFirst(
+            true,
+            () =>
+            {
+                calls++;
+                throw new InvalidOperationException("前台查询失败");
+            });
+
+        Assert.True(snapshot.IsFocusModeActive);
+        Assert.Equal(0, calls);
+    }
+
+    [Fact]
+    public async Task PollLoop_订阅者失败不阻断后续且停止后不再回调()
+    {
+        var probe = new ConstantFocusProbe(new FocusSnapshot(true, false, false, false));
+        await using var service = new FocusModeService(probe, TimeSpan.FromMilliseconds(10));
+        var received = 0;
+        service.Changed += (_, _) => throw new InvalidOperationException("订阅失败");
+        service.Changed += (_, _) => Interlocked.Increment(ref received);
+
+        await Task.Delay(80, TestContext.Current.CancellationToken);
+        await service.StopAsync();
+        var stoppedAt = Volatile.Read(ref received);
+        await Task.Delay(40, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, stoppedAt);
+        Assert.Equal(stoppedAt, Volatile.Read(ref received));
+        Assert.True(probe.CaptureCount > 1);
+    }
+
+    [Fact]
+    public void RegisterOwnWindow_释放租约后解除注册()
+    {
+        var probe = new RecordingFocusProbe();
+        using var service = new FocusModeService(probe, Timeout.InfiniteTimeSpan);
+        var lease = service.RegisterOwnWindow(new IntPtr(42));
+        service.PollNow();
+        Assert.Contains(new IntPtr(42), probe.LastOwnWindows);
+
+        lease.Dispose();
+        service.PollNow();
+        Assert.DoesNotContain(new IntPtr(42), probe.LastOwnWindows);
+    }
+
+    private sealed class ConstantFocusProbe(FocusSnapshot snapshot) : IFocusSnapshotProbe
+    {
+        public int CaptureCount { get; private set; }
+        public FocusSnapshot Capture(IReadOnlyCollection<nint> ownWindows)
+        {
+            CaptureCount++;
+            return snapshot;
+        }
+    }
+
+    private sealed class RecordingFocusProbe : IFocusSnapshotProbe
+    {
+        public IReadOnlyCollection<nint> LastOwnWindows { get; private set; } = [];
+        public FocusSnapshot Capture(IReadOnlyCollection<nint> ownWindows)
+        {
+            LastOwnWindows = ownWindows.ToArray();
+            return default;
         }
     }
 }

@@ -187,11 +187,14 @@ public sealed class SqlitePetStateStore : IPetStateStore
             return null;
         }
 
+        string? storedSpeciesId = null;
+        string? json = null;
+        string? storedUpdatedAtText = null;
         try
         {
-            var storedSpeciesId = reader.GetString(0);
-            var json = reader.GetString(1);
-            var storedUpdatedAtText = reader.GetString(2);
+            storedSpeciesId = reader.GetString(0);
+            json = reader.GetString(1);
+            storedUpdatedAtText = reader.GetString(2);
             var state = JsonSerializer.Deserialize<PetState>(json, JsonOptions)
                 ?? throw new JsonException("状态 JSON 结果为空。");
 
@@ -216,9 +219,73 @@ public sealed class SqlitePetStateStore : IPetStateStore
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            if (json is not null)
+            {
+                await TryPreserveCorruptRecordAsync(
+                    petId,
+                    storedSpeciesId,
+                    json,
+                    storedUpdatedAtText,
+                    exception);
+            }
+
             throw new InvalidDataException(
                 $"灵兽 {petId} 的存档损坏或内容不合法。",
                 exception);
+        }
+    }
+
+    private async Task TryPreserveCorruptRecordAsync(
+        Guid petId,
+        string? speciesId,
+        string stateJson,
+        string? updatedAt,
+        Exception originalException)
+    {
+        var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMddTHHmmssfffffffZ");
+        var backupPath =
+            $"{_databasePath}.pet-{petId:N}.corrupt-{timestamp}-{Guid.NewGuid():N}.json";
+        var temporaryPath = backupPath + ".tmp";
+        var record = JsonSerializer.Serialize(
+            new
+            {
+                petId,
+                speciesId,
+                stateJson,
+                updatedAt,
+                preservedAt = DateTimeOffset.UtcNow
+            },
+            JsonOptions);
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                temporaryPath,
+                record,
+                CancellationToken.None);
+            File.Move(temporaryPath, backupPath);
+        }
+        catch (Exception backupException)
+            when (backupException is IOException or UnauthorizedAccessException)
+        {
+            originalException.Data["Honey.Persistence.CorruptBackupException"] =
+                backupException;
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+            catch (Exception cleanupException)
+                when (cleanupException is IOException or UnauthorizedAccessException)
+            {
+                originalException.Data["Honey.Persistence.CorruptBackupCleanupException"] =
+                    cleanupException;
+            }
         }
     }
 

@@ -106,9 +106,13 @@ public partial class OverlayWindow : Window
 
     public event Action<bool>? AutonomousMovementPaused;
     public event Action<bool>? UserPauseChanged;
+    public event Action? PetCommandRequested;
+    public event Action<BehaviorKey>? SkillCommandRequested;
+    public event Action? ModeToggleRequested;
 
     public OverlayHitTestPolicy HitTestPolicy => _hitTestPolicy;
     public PetState RuntimeState => _runtime.State;
+    public IPetRuntimeCommands RuntimeCommands => _runtime;
 
     public RenderSnapshot Snapshot
     {
@@ -206,6 +210,10 @@ public partial class OverlayWindow : Window
     }
 
     public void SetFocusActive(bool active) => _runtime.SetFocusActive(active);
+
+    public void StopRuntime() => _runtime.Dispose();
+
+    public Task StopRuntimeAsync() => _runtime.StopAsync();
 
     private void OnPaintSurface(object? sender, SKPaintSurfaceEventArgs e)
     {
@@ -352,12 +360,10 @@ public partial class OverlayWindow : Window
 
     private void OnPetButtonClick(object sender, RoutedEventArgs e)
     {
-        Snapshot = Snapshot with { Mood = PetMood.Happy };
-        SafeCallback.Invoke(
-            () => SafeEventDispatcher.Publish(
-                InteractionOccurred,
-                new PetInteractionOccurred(_petId, "pet"),
-                ReportInputError),
+        SafeEventDispatcher.Publish(PetCommandRequested, ReportInputError);
+        SafeEventDispatcher.Publish(
+            InteractionOccurred,
+            new PetInteractionOccurred(_petId, "pet"),
             ReportInputError);
         SetMenuOpen(false);
     }
@@ -365,28 +371,22 @@ public partial class OverlayWindow : Window
     private void OnPauseButtonClick(object sender, RoutedEventArgs e)
     {
         SetUserPaused(!_userPaused);
-        SafeCallback.Invoke(() => UserPauseChanged?.Invoke(_userPaused), ReportInputError);
+        SafeEventDispatcher.Publish(UserPauseChanged, _userPaused, ReportInputError);
         SetMenuOpen(false);
     }
 
     private void OnSleepButtonClick(object sender, RoutedEventArgs e)
     {
-        Snapshot = Snapshot with
-        {
-            Mood = PetMood.Sleepy,
-            Behavior = BuiltInBehaviorKeys.Sleep
-        };
+        SafeEventDispatcher.Publish(
+            SkillCommandRequested,
+            new BehaviorKey(BuiltInBehaviorKeys.Sleep),
+            ReportInputError);
         SetMenuOpen(false);
     }
 
     private void OnModeButtonClick(object sender, RoutedEventArgs e)
     {
-        Snapshot = Snapshot with
-        {
-            Mode = Snapshot.Mode == PetMode.Normal ? PetMode.Berserk : PetMode.Normal,
-            Mood = Snapshot.Mode == PetMode.Normal ? PetMood.Angry : PetMood.Curious
-        };
-        SpiderCanvas.InvalidateVisual();
+        SafeEventDispatcher.Publish(ModeToggleRequested, ReportInputError);
         SetMenuOpen(false);
     }
 

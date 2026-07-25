@@ -17,7 +17,7 @@ public readonly record struct FocusSnapshot(
     bool IsShellWindow)
 {
     public bool IsFocusModeActive =>
-        (IsFullscreen || IsSessionLocked) && !IsOwnWindow && !IsShellWindow;
+        IsSessionLocked || (IsFullscreen && !IsOwnWindow && !IsShellWindow);
 }
 
 public interface IFocusSnapshotProbe
@@ -25,13 +25,29 @@ public interface IFocusSnapshotProbe
     FocusSnapshot Capture(IReadOnlyCollection<IntPtr> ownWindows);
 }
 
-public sealed class FocusModeService : IDisposable
+public static class FocusProbePolicy
 {
-    private readonly HashSet<IntPtr> _ownWindows = [];
-    private readonly Timer _timer;
+    public static FocusSnapshot CaptureLockedFirst(
+        bool isSessionLocked,
+        Func<FocusSnapshot> captureForeground)
+    {
+        ArgumentNullException.ThrowIfNull(captureForeground);
+        return isSessionLocked
+            ? new FocusSnapshot(false, true, false, false)
+            : captureForeground();
+    }
+}
+
+public sealed class FocusModeService : IDisposable, IAsyncDisposable
+{
+    private readonly Dictionary<IntPtr, int> _ownWindows = [];
     private readonly IFocusSnapshotProbe _probe;
+    private readonly CancellationTokenSource _stopSource = new();
+    private readonly Task _pollLoop;
+    private readonly object _pollSync = new();
     private bool _disposed;
     private volatile bool _sessionLocked;
+    private int _stopped;
 
     public FocusModeService(
         IFocusSnapshotProbe? probe = null,
@@ -39,27 +55,30 @@ public sealed class FocusModeService : IDisposable
     {
         _probe = probe ?? new NativeFocusSnapshotProbe(() => _sessionLocked);
         var interval = pollInterval ?? TimeSpan.FromSeconds(1);
-        _timer = new Timer(
-            _ => PollNow(),
-            null,
-            interval,
-            interval);
         SystemEvents.SessionSwitch += OnSessionSwitch;
+        _pollLoop = interval == Timeout.InfiniteTimeSpan
+            ? Task.CompletedTask
+            : RunPollLoopAsync(interval, _stopSource.Token);
     }
 
     public FocusSnapshot Snapshot { get; private set; }
     public bool IsFocusModeActive => Snapshot.IsFocusModeActive;
     public event EventHandler<FocusSnapshot>? Changed;
+    public event Action<Exception>? Error;
 
-    public void RegisterOwnWindow(IntPtr handle)
+    public IDisposable RegisterOwnWindow(IntPtr handle)
     {
-        if (handle != IntPtr.Zero)
+        if (handle == IntPtr.Zero)
         {
-            lock (_ownWindows)
-            {
-                _ownWindows.Add(handle);
-            }
+            return EmptyLease.Instance;
         }
+
+        lock (_ownWindows)
+        {
+            _ownWindows[handle] = _ownWindows.GetValueOrDefault(handle) + 1;
+        }
+
+        return new WindowRegistration(this, handle);
     }
 
     public static bool IsFullscreen(WindowBounds window, WindowBounds monitor, int tolerance = 2) =>
@@ -75,20 +94,28 @@ public sealed class FocusModeService : IDisposable
 
     public void PollNow()
     {
-        try
+        if (Volatile.Read(ref _stopped) != 0)
         {
-            IntPtr[] ownWindows;
-            lock (_ownWindows)
-            {
-                ownWindows = [.. _ownWindows];
-            }
-
-            UpdateSnapshot(_probe.Capture(ownWindows));
+            return;
         }
-        catch (Exception exception)
+
+        lock (_pollSync)
         {
-            Trace.TraceError("专注模式前台窗口查询失败：{0}", exception);
-            UpdateSnapshot(default);
+            try
+            {
+                IntPtr[] ownWindows;
+                lock (_ownWindows)
+                {
+                    ownWindows = [.. _ownWindows.Keys];
+                }
+
+                UpdateSnapshot(_probe.Capture(ownWindows));
+            }
+            catch (Exception exception) when (!IsFatal(exception))
+            {
+                ReportError(exception);
+                UpdateSnapshot(default);
+            }
         }
     }
 
@@ -100,8 +127,8 @@ public sealed class FocusModeService : IDisposable
         }
 
         _disposed = true;
-        SystemEvents.SessionSwitch -= OnSessionSwitch;
-        _timer.Dispose();
+        StopAsync().AsTask().GetAwaiter().GetResult();
+        _stopSource.Dispose();
     }
 
     private void UpdateSnapshot(FocusSnapshot next)
@@ -109,8 +136,37 @@ public sealed class FocusModeService : IDisposable
         if (next != Snapshot)
         {
             Snapshot = next;
-            Changed?.Invoke(this, next);
+            PublishChanged(next);
         }
+    }
+
+    public async ValueTask StopAsync()
+    {
+        if (Interlocked.Exchange(ref _stopped, 1) == 0)
+        {
+            SystemEvents.SessionSwitch -= OnSessionSwitch;
+            _stopSource.Cancel();
+        }
+
+        try
+        {
+            await _pollLoop.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_stopSource.IsCancellationRequested)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        await StopAsync().ConfigureAwait(false);
+        _stopSource.Dispose();
     }
 
     private void OnSessionSwitch(object sender, SessionSwitchEventArgs args)
@@ -125,6 +181,106 @@ public sealed class FocusModeService : IDisposable
         }
     }
 
+    private async Task RunPollLoopAsync(TimeSpan interval, CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(interval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                PollNow();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void PublishChanged(FocusSnapshot snapshot)
+    {
+        var handlers = Changed;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var subscriber in handlers.GetInvocationList()
+                     .Cast<EventHandler<FocusSnapshot>>())
+        {
+            try
+            {
+                subscriber(this, snapshot);
+            }
+            catch (Exception exception) when (!IsFatal(exception))
+            {
+                ReportError(exception);
+            }
+        }
+    }
+
+    private void ReportError(Exception exception)
+    {
+        Trace.TraceError("专注模式轮询或订阅者失败：{0}", exception);
+        var handlers = Error;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var subscriber in handlers.GetInvocationList().Cast<Action<Exception>>())
+        {
+            try
+            {
+                subscriber(exception);
+            }
+            catch (Exception sinkException) when (!IsFatal(sinkException))
+            {
+                Trace.TraceError("专注模式错误观察者失败：{0}", sinkException);
+            }
+        }
+    }
+
+    private void Unregister(IntPtr handle)
+    {
+        lock (_ownWindows)
+        {
+            if (!_ownWindows.TryGetValue(handle, out var count))
+            {
+                return;
+            }
+
+            if (count <= 1)
+            {
+                _ownWindows.Remove(handle);
+            }
+            else
+            {
+                _ownWindows[handle] = count - 1;
+            }
+        }
+    }
+
+    private static bool IsFatal(Exception exception) =>
+        exception is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
+
+    private sealed class WindowRegistration(FocusModeService owner, IntPtr handle) : IDisposable
+    {
+        private FocusModeService? _owner = owner;
+        public void Dispose() => Interlocked.Exchange(ref _owner, null)?.Unregister(handle);
+    }
+
+    private sealed class EmptyLease : IDisposable
+    {
+        public static EmptyLease Instance { get; } = new();
+        public void Dispose() { }
+    }
+
 }
 
 internal sealed class NativeFocusSnapshotProbe(
@@ -132,26 +288,29 @@ internal sealed class NativeFocusSnapshotProbe(
 {
     public FocusSnapshot Capture(IReadOnlyCollection<IntPtr> ownWindows)
     {
-        var foreground = GetForegroundWindow();
-        if (foreground == IntPtr.Zero)
+        return FocusProbePolicy.CaptureLockedFirst(sessionLocked(), () =>
         {
-            throw new InvalidOperationException("无法获取前台窗口。");
-        }
+            var foreground = GetForegroundWindow();
+            if (foreground == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("无法获取前台窗口。");
+            }
 
-        var shell = GetShellWindow();
-        var monitor = MonitorFromWindow(foreground, MonitorDefaultToNearest);
-        if (!TryGetWindowRect(foreground, out var window)
-            || monitor == IntPtr.Zero
-            || !TryGetMonitorBounds(monitor, out var bounds))
-        {
-            throw new InvalidOperationException("无法读取前台窗口或显示器边界。");
-        }
+            var shell = GetShellWindow();
+            var monitor = MonitorFromWindow(foreground, MonitorDefaultToNearest);
+            if (!TryGetWindowRect(foreground, out var window)
+                || monitor == IntPtr.Zero
+                || !TryGetMonitorBounds(monitor, out var bounds))
+            {
+                throw new InvalidOperationException("无法读取前台窗口或显示器边界。");
+            }
 
-        return new FocusSnapshot(
-            FocusModeService.IsFullscreen(window, bounds),
-            sessionLocked(),
-            ownWindows.Contains(foreground),
-            foreground == shell);
+            return new FocusSnapshot(
+                FocusModeService.IsFullscreen(window, bounds),
+                false,
+                ownWindows.Contains(foreground),
+                foreground == shell);
+        });
     }
 
     private static bool TryGetWindowRect(IntPtr handle, out WindowBounds bounds)

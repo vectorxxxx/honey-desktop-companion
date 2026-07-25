@@ -33,7 +33,14 @@ public sealed class WindowsRunRegistry : IRunRegistry
     }
 }
 
-public sealed class AutoStartService
+public interface IAutoStartController
+{
+    void Enable(string executablePath);
+    void Disable();
+    bool IsEnabled(string executablePath);
+}
+
+public sealed class AutoStartService : IAutoStartController
 {
     public const string ValueName = "Honey";
     private readonly IRunRegistry _registry;

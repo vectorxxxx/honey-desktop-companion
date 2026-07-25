@@ -1,6 +1,8 @@
 using Honey.Content.WhiteJadeSpider;
 using Honey.Desktop.Runtime;
 using Honey.Desktop.Settings;
+using Honey.Domain.Behavior;
+using Honey.Persistence;
 
 namespace Honey.Desktop.Tests;
 
@@ -151,9 +153,129 @@ public sealed class PetRuntimeControllerTests
             initial);
     }
 
+    [Fact]
+    public void Pet_改善亲密与压力且短反馈不会被下一模拟帧覆盖()
+    {
+        var fixture = CreateRuntime();
+        fixture.Runtime.Pet();
+        var afterPet = fixture.Runtime.State;
+
+        fixture.Runtime.Tick(TimeSpan.FromMilliseconds(500));
+
+        Assert.True(afterPet.Needs.Affection > fixture.Initial.Needs.Affection);
+        Assert.True(afterPet.Needs.Stress < fixture.Initial.Needs.Stress);
+        Assert.Equal(Honey.Domain.Model.PetMood.Happy, fixture.Runtime.State.Mood);
+        fixture.Runtime.Dispose();
+    }
+
+    [Fact]
+    public void RequestSkill_睡眠真实进入播放器并持续多个Tick()
+    {
+        var fixture = CreateRuntime();
+        fixture.Runtime.RequestSkill(new BehaviorKey(BuiltInBehaviorKeys.Sleep));
+
+        var first = fixture.Runtime.Tick(TimeSpan.FromMilliseconds(50));
+        var later = fixture.Runtime.Tick(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(BuiltInBehaviorKeys.Sleep, first.Behavior);
+        Assert.Equal(BuiltInBehaviorKeys.Sleep, later.Behavior);
+        Assert.StartsWith("sleep.", later.Phase, StringComparison.Ordinal);
+        fixture.Runtime.Dispose();
+    }
+
+    [Fact]
+    public void ToggleMode_更新状态与明确偏好且后续模拟不覆盖()
+    {
+        var fixture = CreateRuntime();
+
+        var preference = fixture.Runtime.ToggleMode();
+        fixture.Runtime.Tick(TimeSpan.FromSeconds(1));
+
+        Assert.Equal("berserk", preference);
+        Assert.Equal(Honey.Domain.Model.PetMode.Berserk, fixture.Runtime.State.Mode);
+        Assert.Equal("berserk", fixture.Runtime.Settings.ModePreference);
+        fixture.Runtime.Dispose();
+    }
+
+    [Fact]
+    public void TickFromClock_墙钟回拨不会冻结单调推进()
+    {
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-07-26T00:00:00Z"));
+        var initial = new WhiteJadeSpiderPack().CreateInitialState(time.GetUtcNow());
+        using var runtime = new PetRuntimeController(
+            initial, new AppSettings(), time, new Random(3), startTimer: false);
+        time.SetUtcNow(time.GetUtcNow().AddHours(-2));
+        time.AdvanceTimestamp(TimeSpan.FromSeconds(1));
+
+        runtime.TickFromClock();
+
+        Assert.Equal(
+            TimeSpan.FromSeconds(1),
+            runtime.State.UpdatedAt - initial.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task Commands_更新后的统一状态可保存并按同一Id加载()
+    {
+        var fixture = CreateRuntime();
+        fixture.Runtime.Pet();
+        fixture.Runtime.ToggleMode();
+        fixture.Runtime.RequestSkill(new BehaviorKey(BuiltInBehaviorKeys.Sleep));
+        var expected = fixture.Runtime.State;
+        var database = Path.Combine(
+            Path.GetTempPath(),
+            "Honey.Tests",
+            Guid.NewGuid().ToString("N"),
+            "runtime.db");
+        var store = new SqlitePetStateStore(database);
+
+        await store.SaveAsync(expected, TestContext.Current.CancellationToken);
+        var loaded = await store.LoadAsync(expected.PetId, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, loaded);
+        fixture.Runtime.Dispose();
+    }
+
+    [Fact]
+    public async Task StopAsync_等待计时器退出且之后不再发布帧()
+    {
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-07-26T00:00:00Z"));
+        var initial = new WhiteJadeSpiderPack().CreateInitialState(time.GetUtcNow());
+        await using var runtime = new PetRuntimeController(
+            initial,
+            new AppSettings(),
+            time,
+            new Random(5),
+            startTimer: true);
+        var firstFrame = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var frameCount = 0;
+        runtime.SnapshotChanged += (_, _) =>
+        {
+            Interlocked.Increment(ref frameCount);
+            firstFrame.TrySetResult();
+        };
+        time.AdvanceTimestamp(TimeSpan.FromMilliseconds(50));
+
+        await firstFrame.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await runtime.StopAsync();
+        var stoppedCount = Volatile.Read(ref frameCount);
+        await Task.Delay(
+            TimeSpan.FromMilliseconds(80),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(stoppedCount, Volatile.Read(ref frameCount));
+        await runtime.StopAsync();
+    }
+
     private sealed class ManualTimeProvider(DateTimeOffset current) : TimeProvider
     {
+        private long _timestamp;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
         public override DateTimeOffset GetUtcNow() => current;
         public void Advance(TimeSpan elapsed) => current += elapsed;
+        public override long GetTimestamp() => _timestamp;
+        public void SetUtcNow(DateTimeOffset value) => current = value;
+        public void AdvanceTimestamp(TimeSpan elapsed) => _timestamp += elapsed.Ticks;
     }
 }

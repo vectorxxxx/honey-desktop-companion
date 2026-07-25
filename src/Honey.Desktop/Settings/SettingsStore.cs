@@ -1,9 +1,15 @@
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 
 namespace Honey.Desktop.Settings;
 
-public sealed class SettingsStore
+public interface ISettingsPersistence
+{
+    Task SaveAsync(AppSettings settings, CancellationToken cancellationToken);
+}
+
+public sealed class SettingsStore : ISettingsPersistence
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -13,41 +19,71 @@ public sealed class SettingsStore
 
     private readonly string _path;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Func<string, Stream> _openRead;
+    private readonly Action<string, string> _moveCorrupt;
+    private readonly Action<Exception>? _errorSink;
 
-    public SettingsStore(string? path = null)
+    public SettingsStore(
+        string? path = null,
+        Func<string, Stream>? openRead = null,
+        Action<string, string>? moveCorrupt = null,
+        Action<Exception>? errorSink = null)
     {
         _path = path ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Honey",
             "settings.json");
+        _openRead = openRead ?? (selectedPath => new FileStream(
+            selectedPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan));
+        _moveCorrupt = moveCorrupt ?? ((source, destination) => File.Move(source, destination));
+        _errorSink = errorSink;
     }
 
     public async Task<AppSettings> LoadAsync(CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!File.Exists(_path))
-        {
-            return new AppSettings();
-        }
-
+        await _gate.WaitAsync(cancellationToken);
         try
         {
-            await using var stream = new FileStream(
-                _path, FileMode.Open, FileAccess.Read, FileShare.Read,
-                4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var settings = await JsonSerializer.DeserializeAsync<AppSettings>(
-                stream, JsonOptions, cancellationToken);
-            return (settings ?? new AppSettings()).Normalize();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(_path))
+            {
+                return new AppSettings();
+            }
+
+            try
+            {
+                await using var stream = _openRead(_path);
+                var settings = await JsonSerializer.DeserializeAsync<AppSettings>(
+                    stream,
+                    JsonOptions,
+                    cancellationToken);
+                return (settings ?? new AppSettings()).Normalize();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (JsonException exception)
+            {
+                PreserveCorruptFile(exception);
+                return new AppSettings();
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                throw new InvalidOperationException(
+                    $"读取设置失败，原文件保持不变：{_path}",
+                    exception);
+            }
         }
-        catch (OperationCanceledException)
+        finally
         {
-            throw;
-        }
-        catch (Exception exception) when (
-            exception is JsonException or IOException or UnauthorizedAccessException)
-        {
-            PreserveCorruptFile();
-            return new AppSettings();
+            _gate.Release();
         }
     }
 
@@ -63,15 +99,24 @@ public sealed class SettingsStore
             var directory = Path.GetDirectoryName(_path)
                 ?? throw new InvalidOperationException("设置路径缺少目录。");
             Directory.CreateDirectory(directory);
-            var temporary = Path.Combine(directory, $"{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
+            var temporary = Path.Combine(
+                directory,
+                $"{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
             try
             {
                 await using (var stream = new FileStream(
-                    temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-                    4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
+                    temporary,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    4096,
+                    FileOptions.Asynchronous | FileOptions.WriteThrough))
                 {
                     await JsonSerializer.SerializeAsync(
-                        stream, settings.Normalize(), JsonOptions, cancellationToken);
+                        stream,
+                        settings.Normalize(),
+                        JsonOptions,
+                        cancellationToken);
                     await stream.FlushAsync(cancellationToken);
                     stream.Flush(flushToDisk: true);
                 }
@@ -93,7 +138,7 @@ public sealed class SettingsStore
         }
     }
 
-    private void PreserveCorruptFile()
+    private void PreserveCorruptFile(JsonException parseException)
     {
         if (!File.Exists(_path))
         {
@@ -102,6 +147,25 @@ public sealed class SettingsStore
 
         var diagnosticPath =
             $"{_path}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
-        File.Move(_path, diagnosticPath);
+        try
+        {
+            _moveCorrupt(_path, diagnosticPath);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceError(
+                "设置内容损坏，但保留诊断副本失败。解析错误：{0}；移动错误：{1}",
+                parseException,
+                exception);
+            try
+            {
+                _errorSink?.Invoke(exception);
+            }
+            catch (Exception sinkException)
+            {
+                Trace.TraceError("设置错误观察者失败：{0}", sinkException);
+            }
+        }
     }
 }
