@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
@@ -16,7 +15,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
     private readonly Action<Exception>? _errorSink;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly object _lifecycleSync = new();
-    private readonly ConcurrentDictionary<Guid, Lazy<Task<bool>>> _requests = new();
+    private readonly SingleInstanceRequestCache _requests = new();
     private Task? _listenerTask;
     private Task? _disposeTask;
     private bool _disposing;
@@ -184,11 +183,6 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
-                using var reader = new StreamReader(
-                    server,
-                    Encoding.UTF8,
-                    detectEncodingFromByteOrderMarks: false,
-                    leaveOpen: true);
                 using var writer = new StreamWriter(
                     server,
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
@@ -199,25 +193,27 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
                 using var readTimeout =
                     CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 readTimeout.CancelAfter(AttemptTimeout);
-                var frame = await reader.ReadLineAsync(readTimeout.Token).ConfigureAwait(false);
-                if (frame is null ||
-                    frame.Length > 96 ||
-                    !SingleInstanceMessage.TryParseRequest(frame, out var request))
+                var request = await SingleInstanceMessage.ReadRequestFrameAsync(
+                    server,
+                    readTimeout.Token).ConfigureAwait(false);
+                if (request is null)
                 {
                     continue;
                 }
 
+                if (!_requests.TryGetOrAdd(
+                    request.Value,
+                    () => ExecuteCommandAsync(commandHandler, request.Value.Command),
+                    out var completion))
+                {
+                    continue;
+                }
                 await writer.WriteLineAsync(
-                    $"accepted|{request.RequestId:N}|{Environment.ProcessId}".AsMemory(),
+                    $"accepted|{request.Value.RequestId:N}|{Environment.ProcessId}".AsMemory(),
                     readTimeout.Token).ConfigureAwait(false);
-                var result = _requests.GetOrAdd(
-                    request.RequestId,
-                    _ => new Lazy<Task<bool>>(
-                        () => ExecuteCommandAsync(commandHandler, request.Command),
-                        LazyThreadSafetyMode.ExecutionAndPublication));
-                var success = await result.Value.ConfigureAwait(false);
+                var success = await completion.ConfigureAwait(false);
                 await writer.WriteLineAsync(
-                    $"completed|{request.RequestId:N}|{(success ? "ok" : "error")}".AsMemory(),
+                    $"completed|{request.Value.RequestId:N}|{(success ? "ok" : "error")}".AsMemory(),
                     readTimeout.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

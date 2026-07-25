@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "..\..\scripts\publish-safety.ps1")
 
 function Assert-Throws([scriptblock]$Action, [string]$Message) {

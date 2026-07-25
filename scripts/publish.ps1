@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Configuration = "Release",
     [string]$Output = "artifacts/win-x64",
     [string]$DotnetPath
@@ -80,6 +80,12 @@ finally {
         $stagingRoot = Get-NormalizedPath (Join-Path $repo "artifacts\.honey-staging")
         $resolvedStage = Get-NormalizedPath $stagePath
         if (Test-IsStrictDescendant -Parent $stagingRoot -Child $resolvedStage) {
+            Assert-NoReparsePath -Path $resolvedStage -StopAt (Get-NormalizedPath $repo)
+            $stageReparse = @(Get-ChildItem -LiteralPath $resolvedStage -Recurse -Force |
+                Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+            if ($stageReparse.Count -gt 0) {
+                throw "暂存目录含重解析点，拒绝递归清理。"
+            }
             Remove-Item -LiteralPath $resolvedStage -Recurse -Force
         }
     }

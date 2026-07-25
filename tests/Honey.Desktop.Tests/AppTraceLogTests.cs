@@ -53,4 +53,34 @@ public sealed class AppTraceLogTests
             }
         }
     }
+
+    [Fact]
+    public async Task 长进程并发错误风暴期间活动与轮转日志始终有界()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"honey-log-storm-{Guid.NewGuid():N}");
+        const int maximumBytes = 1024;
+        try
+        {
+            using var listener = AppTraceLog.Create(root, maximumBytes);
+            var writers = Enumerable.Range(0, 12).Select(worker => Task.Run(() =>
+            {
+                for (var index = 0; index < 200; index++)
+                {
+                    listener.WriteLine($"{worker:D2}:{index:D3}:{new string('故', 40)}");
+                }
+            }, TestContext.Current.CancellationToken));
+            await Task.WhenAll(writers);
+            listener.Flush();
+
+            Assert.InRange(new FileInfo(Path.Combine(root, "honey.log")).Length, 1, maximumBytes);
+            Assert.InRange(new FileInfo(Path.Combine(root, "honey.log.1")).Length, 1, maximumBytes);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
 }

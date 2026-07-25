@@ -1,4 +1,26 @@
-function Test-SoakIdentity {
+﻿function Test-HoneyIdentitySnapshot {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][int]$ExpectedProcessId,
+        [Parameter(Mandatory = $true)][datetime]$ExpectedStartTimeUtc,
+        [Parameter(Mandatory = $true)][string]$ExpectedExePath,
+        [Parameter(Mandatory = $true)][string]$ExpectedInstanceId,
+        [Parameter(Mandatory = $true)][int]$ActualProcessId,
+        [Parameter(Mandatory = $true)][datetime]$ActualStartTimeUtc,
+        [Parameter(Mandatory = $true)][string]$ActualExePath,
+        [Parameter(Mandatory = $true)][string]$ActualCommandLine
+    )
+
+    return $ActualProcessId -eq $ExpectedProcessId -and
+        $ActualStartTimeUtc -eq $ExpectedStartTimeUtc -and
+        [string]::Equals(
+            [IO.Path]::GetFullPath($ActualExePath),
+            [IO.Path]::GetFullPath($ExpectedExePath),
+            [StringComparison]::OrdinalIgnoreCase) -and
+        $ActualCommandLine.IndexOf($ExpectedInstanceId, [StringComparison]::Ordinal) -ge 0
+}
+
+function Test-HoneyProcessIdentity {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][int]$ProcessId,
@@ -10,23 +32,48 @@ function Test-SoakIdentity {
     $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     if ($null -eq $process -or $process.HasExited) { return $false }
     try {
-        if ($process.StartTime.ToUniversalTime() -ne $StartTimeUtc -or
-            -not [string]::Equals(
-                [IO.Path]::GetFullPath($process.Path),
-                [IO.Path]::GetFullPath($ExePath),
-                [StringComparison]::OrdinalIgnoreCase)) {
-            return $false
-        }
+        $actualStart = $process.StartTime.ToUniversalTime()
+        $actualPath = $process.Path
     }
     catch { return $false }
-
     $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
-    return $null -ne $cim -and
-        [string]::Equals(
-            [IO.Path]::GetFullPath([string]$cim.ExecutablePath),
-            [IO.Path]::GetFullPath($ExePath),
-            [StringComparison]::OrdinalIgnoreCase) -and
-        ([string]$cim.CommandLine).Contains($InstanceId, [StringComparison]::Ordinal)
+    if ($null -eq $cim) { return $false }
+    return Test-HoneyIdentitySnapshot `
+        -ExpectedProcessId $ProcessId `
+        -ExpectedStartTimeUtc $StartTimeUtc `
+        -ExpectedExePath $ExePath `
+        -ExpectedInstanceId $InstanceId `
+        -ActualProcessId ([int]$cim.ProcessId) `
+        -ActualStartTimeUtc $actualStart `
+        -ActualExePath ([string]$cim.ExecutablePath) `
+        -ActualCommandLine ([string]$cim.CommandLine)
+}
+
+function Test-SoakIdentity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][datetime]$StartTimeUtc,
+        [Parameter(Mandatory = $true)][string]$ExePath,
+        [Parameter(Mandatory = $true)][string]$InstanceId
+    )
+    return Test-HoneyProcessIdentity @PSBoundParameters
+}
+
+function Stop-ExactHoneyProcess {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [Parameter(Mandatory = $true)][datetime]$StartTimeUtc,
+        [Parameter(Mandatory = $true)][string]$ExePath,
+        [Parameter(Mandatory = $true)][string]$InstanceId
+    )
+
+    if (-not (Test-HoneyProcessIdentity @PSBoundParameters)) {
+        return $false
+    }
+    Stop-Process -Id $ProcessId -Force
+    return $true
 }
 
 function Assert-SoakLifecycleOutcome {

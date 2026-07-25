@@ -76,6 +76,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\soak-test.ps1 `
 
 冒烟测试使用唯一隔离标识精确核对本次 `Honey.exe` 的进程数量，不会操作其他 Honey 进程；存档验收会复制数据库及 WAL/SHM 到隔离临时目录，再执行 `quick_check`、`integrity_check`、架构与状态查询，原存档目录的文件、内容与时间戳保持不变。
 
+单实例互斥体沿用 Windows 当前用户默认 DACL，并把当前用户 SID 与数据目录的物理规范路径共同纳入名称哈希；命名管道同时启用 `CurrentUserOnly`。
+
 浸泡测试默认 8 小时，每 30 秒采样一次。验收门槛为空闲平均 CPU 小于 1%、稳定工作集小于 150 MB、最后 4 小时线性增长小于 20 MB，并且进程无异常退出。开发时可用 `-DurationSeconds`、`-SampleSeconds` 和 `-WarmupSeconds` 做短时脚本验证；短时结果不能替代正式 8 小时验收。
 
-第三方依赖及许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+第三方依赖与包到条款的映射见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，完整许可原文与上游第三方声明位于 [`LICENSES`](LICENSES)；两者均嵌入最终 `Honey.exe`。

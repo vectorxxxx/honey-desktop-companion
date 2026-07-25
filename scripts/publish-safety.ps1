@@ -1,4 +1,4 @@
-$script:PublishOwnerMagic = "Honey.PublishOwner"
+﻿$script:PublishOwnerMagic = "Honey.PublishOwner"
 $script:PublishOwnerVersion = 1
 
 function Get-NormalizedPath {
@@ -87,7 +87,13 @@ function Get-PublishOwnershipMarkerPath {
     $repository = Get-NormalizedPath $RepositoryRoot
     $target = Resolve-SafePublishOutput -RepositoryRoot $repository -Output $Output
     $bytes = [Text.Encoding]::UTF8.GetBytes($target.ToUpperInvariant())
-    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = ([BitConverter]::ToString($sha256.ComputeHash($bytes))).Replace("-", "")
+    }
+    finally {
+        $sha256.Dispose()
+    }
     return Join-Path $repository "artifacts\.honey-publish-owners\$hash.json"
 }
 

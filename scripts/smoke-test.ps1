@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$ExePath,
     [string]$DataRoot,
@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "soak-lifecycle.ps1")
 $executable = (Resolve-Path -LiteralPath $ExePath -ErrorAction Stop).Path
 $ownsDataRoot = [string]::IsNullOrWhiteSpace($DataRoot)
 if ($ownsDataRoot) {
@@ -16,6 +17,7 @@ if ($ownsDataRoot) {
 }
 $DataRoot = [IO.Path]::GetFullPath($DataRoot)
 $primary = $null
+$primaryStartTimeUtc = $null
 
 function Wait-ProcessState {
     param(
@@ -88,9 +90,15 @@ function Stop-IsolatedHoney {
     }
     catch {
         $candidate = Get-Process -Id $primary.Id -ErrorAction SilentlyContinue
-        if ($null -ne $candidate -and
-            [string]::Equals($candidate.Path, $executable, [StringComparison]::OrdinalIgnoreCase)) {
-            Stop-Process -Id $primary.Id -Force
+        if ($null -ne $candidate) {
+            $stopped = Stop-ExactHoneyProcess `
+                -ProcessId $primary.Id `
+                -StartTimeUtc $primaryStartTimeUtc `
+                -ExePath $executable `
+                -InstanceId $InstanceId
+            if (-not $stopped) {
+                throw "拒绝停止身份不匹配的进程；可能发生 PID 复用。"
+            }
         }
         throw
     }
@@ -108,6 +116,7 @@ try {
     }
 
     $primary = Start-Honey "--background"
+    $primaryStartTimeUtc = $primary.StartTime.ToUniversalTime()
     Wait-ProcessState -Id $primary.Id -ShouldExist $true
     $earlyShow = Start-Honey "--show"
     if (-not $earlyShow.WaitForExit($TimeoutSeconds * 1000)) {
@@ -138,6 +147,7 @@ try {
 
     Stop-IsolatedHoney
     $primary = $null
+    $primaryStartTimeUtc = $null
     $null = Assert-IsolatedCount -Expected 0
 
     $database = Join-Path $DataRoot "honey.db"
@@ -174,11 +184,13 @@ try {
     Remove-Item -LiteralPath $corruptRoot -Recurse -Force
 
     $primary = Start-Honey "--background"
+    $primaryStartTimeUtc = $primary.StartTime.ToUniversalTime()
     Wait-ProcessState -Id $primary.Id -ShouldExist $true
     Start-Sleep -Milliseconds 800
     if ($primary.HasExited) { throw "Restarted instance exited unexpectedly." }
     Stop-IsolatedHoney
     $primary = $null
+    $primaryStartTimeUtc = $null
     $null = Assert-IsolatedCount -Expected 0
 
     Write-Host ("Smoke test passed. No-instance shutdown: {0:N0} ms" -f $watch.Elapsed.TotalMilliseconds)

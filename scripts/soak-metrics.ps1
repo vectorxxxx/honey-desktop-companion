@@ -1,4 +1,4 @@
-function Get-SoakAcceptance {
+﻿function Get-SoakAcceptance {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]

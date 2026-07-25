@@ -18,6 +18,8 @@
     <Resource Include="Assets\Honey.ico" />
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md"
                       LogicalName="Honey.THIRD-PARTY-NOTICES.md" />
+    <EmbeddedResource Include="..\..\LICENSES\**\*"
+                      LogicalName="Honey.LICENSES.%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <PropertyGroup>

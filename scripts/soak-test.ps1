@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$ExePath,
     [double]$DurationHours = 8,
     [int]$DurationSeconds = 0,
@@ -99,10 +99,8 @@ finally {
             $stopperStartTimeUtc = $stopper.StartTime.ToUniversalTime()
             if (-not $stopper.WaitForExit(15000)) {
                 $shutdownExitCode = -2
-                if (Test-SoakIdentity -ProcessId $stopper.Id `
-                    -StartTimeUtc $stopperStartTimeUtc -ExePath $executable -InstanceId $instanceId) {
-                    Stop-Process -Id $stopper.Id -Force
-                }
+                $null = Stop-ExactHoneyProcess -ProcessId $stopper.Id `
+                    -StartTimeUtc $stopperStartTimeUtc -ExePath $executable -InstanceId $instanceId
             } else {
                 $shutdownExitCode = $stopper.ExitCode
             }
@@ -111,7 +109,8 @@ finally {
                 -ExePath $executable -InstanceId $instanceId
             if ($residual) {
                 # 只强制清理经 PID、启动时间、EXE 路径和实例令牌四重确认的本次进程。
-                Stop-Process -Id $process.Id -Force
+                $null = Stop-ExactHoneyProcess -ProcessId $process.Id `
+                    -StartTimeUtc $startTimeUtc -ExePath $executable -InstanceId $instanceId
             }
             Assert-SoakLifecycleOutcome -FinalIdentityAlive:$finalIdentityAlive `
                 -ShutdownExitCode $shutdownExitCode -ResidualExactInstance:$residual
