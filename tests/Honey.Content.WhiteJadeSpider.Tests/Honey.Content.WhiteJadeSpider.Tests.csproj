@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Honey.Content.WhiteJadeSpider\Honey.Content.WhiteJadeSpider.csproj" />
+    <ProjectReference Include="..\..\src\Honey.Domain\Honey.Domain.csproj" />
   </ItemGroup>
 
 </Project>
