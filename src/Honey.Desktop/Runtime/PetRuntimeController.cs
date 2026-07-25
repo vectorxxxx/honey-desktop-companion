@@ -12,6 +12,7 @@ public interface IPetRuntimeCommands
 {
     void Pet();
     void RequestSkill(BehaviorKey key);
+    bool TryRequestAiSkill(BehaviorKey key);
     string ToggleMode();
 }
 
@@ -151,26 +152,40 @@ public sealed class PetRuntimeController :
         {
             var skill = WhiteJadeSpiderSkills.All.SingleOrDefault(item => item.Key == key)
                 ?? throw new ArgumentException($"未知技能：{key}", nameof(key));
-            _player.Start(skill);
-            _currentFrame = _player.Advance(TimeSpan.Zero);
-            _lastStarted[key] = _skillClock;
-            _state = _state with
-            {
-                PreviousBehavior = key,
-                Mood = key == new BehaviorKey(BuiltInBehaviorKeys.Sleep)
-                    ? PetMood.Sleepy
-                    : _state.Mood
-            };
-            _moodOverrideUntil = key == new BehaviorKey(BuiltInBehaviorKeys.Sleep)
-                ? SaturatingAdd(_skillClock, skill.TimelineDuration)
-                : _moodOverrideUntil;
-            _nextIntent = SaturatingAdd(
-                SaturatingAdd(_skillClock, skill.TimelineDuration),
-                PetRuntimePolicy.IntentInterval(_settings.ActivityLevel, _focusActive));
-            snapshot = BuildSnapshot();
+            snapshot = StartSkillLocked(skill);
         }
 
         PublishSnapshot(snapshot);
+    }
+
+    public bool TryRequestAiSkill(BehaviorKey key)
+    {
+        RenderSnapshot snapshot;
+        lock (_sync)
+        {
+            if (key.Value is not (
+                    BuiltInBehaviorKeys.Observe
+                    or BuiltInBehaviorKeys.Play
+                    or BuiltInBehaviorKeys.Sleep
+                    or BuiltInBehaviorKeys.Forage
+                    or BuiltInBehaviorKeys.Web)
+                || _player.IsPlaying)
+            {
+                return false;
+            }
+
+            var skill = WhiteJadeSpiderSkills.All.Single(item => item.Key == key);
+            if (_lastStarted.TryGetValue(key, out var last)
+                && _skillClock - last < skill.Cooldown)
+            {
+                return false;
+            }
+
+            snapshot = StartSkillLocked(skill);
+        }
+
+        PublishSnapshot(snapshot);
+        return true;
     }
 
     public string ToggleMode()
@@ -281,6 +296,27 @@ public sealed class PetRuntimeController :
                 : PetRuntimePolicy.ResolveMood(_state.Needs, mode),
             Scale = _settings.PetSize / 140d
         };
+    }
+
+    private RenderSnapshot StartSkillLocked(SkillDefinition skill)
+    {
+        _player.Start(skill);
+        _currentFrame = _player.Advance(TimeSpan.Zero);
+        _lastStarted[skill.Key] = _skillClock;
+        _state = _state with
+        {
+            PreviousBehavior = skill.Key,
+            Mood = skill.Key == new BehaviorKey(BuiltInBehaviorKeys.Sleep)
+                ? PetMood.Sleepy
+                : _state.Mood
+        };
+        _moodOverrideUntil = skill.Key == new BehaviorKey(BuiltInBehaviorKeys.Sleep)
+            ? SaturatingAdd(_skillClock, skill.TimelineDuration)
+            : _moodOverrideUntil;
+        _nextIntent = SaturatingAdd(
+            SaturatingAdd(_skillClock, skill.TimelineDuration),
+            PetRuntimePolicy.IntentInterval(_settings.ActivityLevel, _focusActive));
+        return BuildSnapshot();
     }
 
     private void AdvanceAutonomy(TimeSpan step)

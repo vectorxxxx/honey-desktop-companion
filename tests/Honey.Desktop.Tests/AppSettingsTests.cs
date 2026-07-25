@@ -30,4 +30,19 @@ public sealed class AppSettingsTests
         Assert.Equal(0.35, normalized.SoundVolume);
         Assert.Equal(normalized, normalized.Normalize());
     }
+
+    [Fact]
+    public void Normalize_AI地址和模型非法时恢复默认并关闭AI()
+    {
+        var normalized = new AppSettings
+        {
+            AiEnabled = true,
+            AiEndpoint = "http://example.com/v1",
+            AiModel = " "
+        }.Normalize();
+
+        Assert.False(normalized.AiEnabled);
+        Assert.Equal("https://api.openai.com/v1", normalized.AiEndpoint);
+        Assert.Equal("gpt-5.6-luna", normalized.AiModel);
+    }
 }

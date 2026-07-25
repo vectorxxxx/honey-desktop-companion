@@ -6,8 +6,11 @@ using Honey.Desktop.Shutdown;
 using Honey.Desktop.Tray;
 using Honey.Content.WhiteJadeSpider;
 using Honey.Integrations.Windows;
+using Honey.Integrations.Ai;
+using Honey.Integrations.Security;
 using Honey.Persistence;
 using System.Diagnostics;
+using System.Net.Http;
 using System.Windows.Interop;
 using Microsoft.Win32;
 
@@ -23,6 +26,10 @@ public partial class App : System.Windows.Application
     private SettingsStore? _settingsStore;
     private AutoStartService? _autoStart;
     private SettingsApplicationCoordinator? _settingsCoordinator;
+    private DpapiSecretStore? _secretStore;
+    private string? _aiApiKey;
+    private HttpClient? _aiHttpClient;
+    private AiCompanionCoordinator? _aiCoordinator;
     private FocusModeService? _focusMode;
     private SqlitePetStateStore? _petStateStore;
     private IPetRuntimeLifecycle? _runtimeLifecycle;
@@ -51,6 +58,17 @@ public partial class App : System.Windows.Application
 
         var paths = new AppDataPaths();
         paths.EnsureDirectories();
+        _secretStore = new DpapiSecretStore();
+        try
+        {
+            _aiApiKey = await _secretStore.LoadAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("AI 密钥读取失败，保持 AI 本地降级：{0}", exception);
+        }
+        _aiHttpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        _aiCoordinator = new AiCompanionCoordinator(CreateAiProvider);
         _settingsStore = new SettingsStore();
         try
         {
@@ -85,7 +103,7 @@ public partial class App : System.Windows.Application
         _overlayWindow.UserPauseChanged += OnOverlayPauseChanged;
         _overlayWindow.PetCommandRequested += OnPetCommandRequested;
         _overlayWindow.SkillCommandRequested += OnSkillCommandRequested;
-        _overlayWindow.ModeToggleRequested += OnModeToggleRequested;
+        _overlayWindow.AiInsightRequested += OnAiInsightRequested;
         _overlayWindow.SourceInitialized += (_, _) =>
         {
             _overlayFocusLease?.Dispose();
@@ -158,6 +176,10 @@ public partial class App : System.Windows.Application
         _settingsFocusLease?.Dispose();
         _settingsFocusLease = null;
         _settingsWindow = null;
+        _aiCoordinator = null;
+        _aiHttpClient?.Dispose();
+        _aiHttpClient = null;
+        _aiApiKey = null;
         _trayIcon?.Dispose();
         _trayIcon = null;
         _showCommandDispatcher = null;
@@ -224,7 +246,11 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _settingsWindow = new SettingsWindow(_settings, ApplySettingsAsync)
+        _settingsWindow = new SettingsWindow(
+            _settings,
+            !string.IsNullOrWhiteSpace(_aiApiKey),
+            ApplyAiSettingsAsync,
+            TestAiConnectionAsync)
         {
             Owner = _overlayWindow?.IsVisible == true ? _overlayWindow : null
         };
@@ -287,6 +313,65 @@ public partial class App : System.Windows.Application
             normalized.FocusMode && (_focusMode?.IsFocusModeActive ?? false));
     }
 
+    private async Task ApplyAiSettingsAsync(
+        AiSettingsSubmission submission,
+        CancellationToken cancellationToken)
+    {
+        if (_secretStore is null)
+        {
+            throw new InvalidOperationException("安全密钥存储尚未初始化。");
+        }
+
+        var coordinator = new AiSettingsSaveCoordinator(
+            _secretStore,
+            ApplySettingsAsync);
+        _aiApiKey = await coordinator.ApplyAsync(
+            _aiApiKey,
+            submission,
+            cancellationToken);
+    }
+
+    private async Task<string> TestAiConnectionAsync(
+        AppSettings settings,
+        string? enteredKey,
+        CancellationToken cancellationToken)
+    {
+        var key = string.IsNullOrWhiteSpace(enteredKey) ? _aiApiKey : enteredKey;
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return "测试失败：请先填写或保存 API 密钥。";
+        }
+
+        try
+        {
+            if (_aiHttpClient is null)
+            {
+                return "测试失败：AI 网络组件尚未初始化。";
+            }
+
+            var provider = new OpenAiCompatibleProvider(
+                _aiHttpClient,
+                new AiOptions(
+                    settings.AiEndpoint,
+                    settings.AiModel,
+                    key,
+                    AiOptions.DefaultTimeout));
+            var result = await provider.CompleteAsync(
+                new AiCompanionRequest(
+                    "请用一句简短中文回应连接测试。",
+                    "情绪：平静；形态：常态；行为：观察；需求：均衡",
+                    []),
+                cancellationToken);
+            return result.Available
+                ? "连接成功，AI 个性增强可用。"
+                : $"连接未成功：{FailureMessage(result.FailureCode)}";
+        }
+        catch (ArgumentException exception)
+        {
+            return $"配置无效：{exception.Message}";
+        }
+    }
+
     private async Task SaveSettingsSafelyAsync()
     {
         try
@@ -313,17 +398,74 @@ public partial class App : System.Windows.Application
     private void OnSkillCommandRequested(Honey.Domain.Behavior.BehaviorKey key) =>
         _overlayWindow?.RuntimeCommands.RequestSkill(key);
 
-    private void OnModeToggleRequested()
+    private void OnAiInsightRequested()
     {
-        if (_overlayWindow is null)
+        _ = RequestAiInsightAsync();
+    }
+
+    private async Task RequestAiInsightAsync()
+    {
+        if (_overlayWindow is null || _aiCoordinator is null)
         {
             return;
         }
 
-        var preference = _overlayWindow.RuntimeCommands.ToggleMode();
-        _settings = _settings with { ModePreference = preference };
-        _ = SaveSettingsSafelyAsync();
+        var result = await _aiCoordinator.RequestAsync(
+            new AiCompanionRequest(
+                "请结合你现在的状态，给我一句简短灵感并建议一个可选动作。",
+                _overlayWindow.CreateAiStateSummary(),
+                []),
+            intent =>
+            {
+                var accepted = _overlayWindow.RuntimeCommands.TryRequestAiSkill(
+                    new Honey.Domain.Behavior.BehaviorKey(intent));
+                if (!accepted)
+                {
+                    Trace.TraceInformation("AI 建议因技能冷却或运行状态被忽略。");
+                }
+            },
+            CancellationToken.None);
+        _overlayWindow.ShowThought(
+            result.Available
+                ? result.Text ?? "小玉安静地陪在你身边。"
+                : FailureMessage(result.FailureCode));
     }
+
+    private IAiCompanionProvider? CreateAiProvider()
+    {
+        if (!_settings.AiEnabled
+            || string.IsNullOrWhiteSpace(_aiApiKey)
+            || _aiHttpClient is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new OpenAiCompatibleProvider(
+                _aiHttpClient,
+                new AiOptions(
+                    _settings.AiEndpoint,
+                    _settings.AiModel,
+                    _aiApiKey,
+                    AiOptions.DefaultTimeout));
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static string FailureMessage(string? code) => code switch
+    {
+        "disabled" => "AI 尚未启用或未配置密钥，我先按自己的节奏玩耍。",
+        "busy" => "我正在想上一件事，请稍等一下。",
+        "timeout" => "远方回应有些慢，我先继续探索。",
+        "auth" => "AI 密钥未通过验证，请到设置中检查。",
+        "rate_limited" => "今天的灵感稍显拥挤，稍后再试。",
+        "server_error" or "network" => "暂时联系不上灵感源，我仍会照常活动。",
+        _ => "这次没有得到灵感，我先继续自己的探索。"
+    };
 
     private async Task SavePetStateSafelyAsync()
     {

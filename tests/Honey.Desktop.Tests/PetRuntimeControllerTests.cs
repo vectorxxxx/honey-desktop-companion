@@ -184,6 +184,18 @@ public sealed class PetRuntimeControllerTests
     }
 
     [Fact]
+    public void TryRequestAiSkill_仅允许AI白名单并执行技能冷却()
+    {
+        var fixture = CreateRuntime();
+
+        Assert.True(fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Play)));
+        Assert.False(fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Play)));
+        Assert.False(fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Pounce)));
+
+        fixture.Runtime.Dispose();
+    }
+
+    [Fact]
     public void ToggleMode_更新状态与明确偏好且后续模拟不覆盖()
     {
         var fixture = CreateRuntime();

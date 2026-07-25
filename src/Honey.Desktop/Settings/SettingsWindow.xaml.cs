@@ -6,15 +6,23 @@ namespace Honey.Desktop.Settings;
 
 public partial class SettingsWindow : Window
 {
-    private readonly Func<AppSettings, CancellationToken, Task> _save;
+    private readonly Func<AiSettingsSubmission, CancellationToken, Task> _save;
+    private readonly Func<AppSettings, string?, CancellationToken, Task<string>> _testAi;
+    private bool _hasStoredKey;
+    private bool _clearKey;
 
     public SettingsWindow(
         AppSettings settings,
-        Func<AppSettings, CancellationToken, Task> save)
+        bool hasStoredKey,
+        Func<AiSettingsSubmission, CancellationToken, Task> save,
+        Func<AppSettings, string?, CancellationToken, Task<string>> testAi)
     {
         _save = save ?? throw new ArgumentNullException(nameof(save));
+        _testAi = testAi ?? throw new ArgumentNullException(nameof(testAi));
+        _hasStoredKey = hasStoredKey;
         InitializeComponent();
         Apply(settings.Normalize());
+        UpdateKeyStatus();
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
@@ -26,6 +34,8 @@ public partial class SettingsWindow : Window
         StartWithWindows = AutoStartCheck.IsChecked == true,
         FocusMode = FocusCheck.IsChecked == true,
         AiEnabled = AiCheck.IsChecked == true,
+        AiEndpoint = AiEndpointText.Text,
+        AiModel = AiModelText.Text,
         SoundEnabled = SoundCheck.IsChecked == true,
         SoundVolume = VolumeSlider.Value
     };
@@ -38,6 +48,8 @@ public partial class SettingsWindow : Window
         AutoStartCheck.IsChecked = settings.StartWithWindows;
         FocusCheck.IsChecked = settings.FocusMode;
         AiCheck.IsChecked = settings.AiEnabled;
+        AiEndpointText.Text = settings.AiEndpoint;
+        AiModelText.Text = settings.AiModel;
         SoundCheck.IsChecked = settings.SoundEnabled;
         VolumeSlider.Value = settings.SoundVolume;
         PetSizeValue.Text = $"{settings.PetSize} px";
@@ -48,7 +60,26 @@ public partial class SettingsWindow : Window
         ErrorText.Text = string.Empty;
         try
         {
-            await _save(Read().Normalize(), CancellationToken.None);
+            var requested = Read();
+            var normalized = requested.Normalize();
+            if (requested.AiEnabled && !normalized.AiEnabled)
+            {
+                ErrorText.Text = "AI 服务地址或模型无效；公网服务必须使用 HTTPS，本机服务可使用 HTTP。";
+                return;
+            }
+
+            var key = string.IsNullOrWhiteSpace(AiKeyPassword.Password)
+                ? null
+                : AiKeyPassword.Password;
+            if (requested.AiEnabled && !_hasStoredKey && key is null)
+            {
+                ErrorText.Text = "启用 AI 前请填写 API 密钥。";
+                return;
+            }
+
+            await _save(
+                new AiSettingsSubmission(normalized, key, _clearKey),
+                CancellationToken.None);
             DialogResult = true;
             Close();
         }
@@ -60,6 +91,41 @@ public partial class SettingsWindow : Window
 
     private void OnRestoreDefaultsClick(object sender, RoutedEventArgs e) =>
         Apply(new AppSettings());
+
+    private void OnClearAiKeyClick(object sender, RoutedEventArgs e)
+    {
+        AiKeyPassword.Clear();
+        _clearKey = true;
+        _hasStoredKey = false;
+        UpdateKeyStatus();
+    }
+
+    private async void OnTestAiClick(object sender, RoutedEventArgs e)
+    {
+        ErrorText.Text = "正在测试连接…";
+        try
+        {
+            var key = string.IsNullOrWhiteSpace(AiKeyPassword.Password)
+                ? null
+                : AiKeyPassword.Password;
+            if (_clearKey && key is null)
+            {
+                ErrorText.Text = "测试失败：密钥已标记清除，请填写新密钥后再测试。";
+                return;
+            }
+
+            ErrorText.Text = await _testAi(Read().Normalize(), key, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            ErrorText.Text = $"测试失败：{exception.Message}";
+        }
+    }
+
+    private void UpdateKeyStatus() =>
+        AiKeyStatus.Text = _hasStoredKey && !_clearKey
+            ? "已由 Windows 当前用户安全保存，不会回显"
+            : "尚未保存密钥";
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
 
@@ -99,3 +165,8 @@ public partial class SettingsWindow : Window
             ?? comboBox.Items[0];
     }
 }
+
+public sealed record AiSettingsSubmission(
+    AppSettings Settings,
+    string? NewApiKey,
+    bool ClearApiKey);

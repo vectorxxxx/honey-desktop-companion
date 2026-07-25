@@ -17,6 +17,28 @@
                         PaintSurface="OnPaintSurface"
                         IsHitTestVisible="False" />
 
+        <Border x:Name="ThoughtBubble"
+                MaxWidth="230"
+                Padding="14,10"
+                Margin="20,12,20,0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Background="#F21A302E"
+                BorderBrush="#A88ED7CA"
+                BorderThickness="1"
+                CornerRadius="14"
+                Visibility="Collapsed"
+                IsHitTestVisible="False"
+                Panel.ZIndex="9"
+                AutomationProperties.LiveSetting="Polite">
+            <TextBlock x:Name="ThoughtText"
+                       Foreground="#E7FFF8"
+                       FontFamily="Microsoft YaHei UI"
+                       FontSize="12"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"/>
+        </Border>
+
         <Canvas x:Name="RadialMenu"
                 Width="260"
                 Height="260"
@@ -110,15 +132,15 @@
             </Button>
             <Button Canvas.Left="48" Canvas.Top="172"
                     Style="{StaticResource RadialButtonStyle}"
-                    ToolTip="切换狂暴预览"
-                    AutomationProperties.Name="切换普通与狂暴形态"
-                    Click="OnModeButtonClick">
+                    ToolTip="向灵宠寻求灵感"
+                    AutomationProperties.Name="请求 AI 灵感"
+                    Click="OnAiInsightButtonClick">
                 <Viewbox Width="22" Height="22">
                     <Canvas Width="24" Height="24">
                         <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                               StrokeLineJoin="Round" Fill="Transparent"
-                              Data="M13,2 L3,14 L12,14 L11,22 L21,10 L12,10 Z" />
+                              Data="M12,3 A7,7 0 0 0 8,15 L8,18 L16,18 L16,15 A7,7 0 0 0 12,3 M9,21 L15,21 M12,8 L12,13 M9.5,10.5 L14.5,10.5" />
                     </Canvas>
                 </Viewbox>
             </Button>

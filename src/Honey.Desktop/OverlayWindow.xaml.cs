@@ -6,6 +6,7 @@ using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Honey.Content.WhiteJadeSpider;
 using Honey.Desktop.Interaction;
 using Honey.Desktop.Rendering;
@@ -45,6 +46,10 @@ public partial class OverlayWindow : Window
     private bool _userPaused;
     private bool _allowClose;
     private int _disposed;
+    private readonly DispatcherTimer _thoughtTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(6)
+    };
 
     public OverlayWindow(
         DisplayBoundsService displayBounds,
@@ -86,6 +91,11 @@ public partial class OverlayWindow : Window
         _interactionFinalizer = new PointerInteractionFinalizer(_interactionController);
 
         InitializeComponent();
+        _thoughtTimer.Tick += (_, _) =>
+        {
+            _thoughtTimer.Stop();
+            ThoughtBubble.Visibility = Visibility.Collapsed;
+        };
         SourceInitialized += OnSourceInitialized;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -108,12 +118,38 @@ public partial class OverlayWindow : Window
     public event Action<bool>? UserPauseChanged;
     public event Action? PetCommandRequested;
     public event Action<BehaviorKey>? SkillCommandRequested;
-    public event Action? ModeToggleRequested;
+    public event Action? AiInsightRequested;
 
     public OverlayHitTestPolicy HitTestPolicy => _hitTestPolicy;
     public PetState RuntimeState => _runtime.State;
     public IPetRuntimeCommands RuntimeCommands => _runtime;
     public IPetRuntimeLifecycle RuntimeLifecycle => _runtime;
+
+    public string CreateAiStateSummary()
+    {
+        var state = _runtime.State;
+        return $"情绪：{MoodName(state.Mood)}；形态：{ModeName(state.Mode)}；"
+            + $"行为：{Snapshot.Behavior}；需求："
+            + $"饥饿{NeedBand(state.Needs.Hunger)}、精力{NeedBand(state.Needs.Energy)}、"
+            + $"好奇{NeedBand(state.Needs.Curiosity)}、亲密{NeedBand(state.Needs.Affection)}、"
+            + $"压力{NeedBand(state.Needs.Stress)}";
+    }
+
+    public void ShowThought(string text)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(() => ShowThought(text));
+            return;
+        }
+
+        ThoughtText.Text = string.IsNullOrWhiteSpace(text)
+            ? "小玉歪了歪头，继续自己的探索。"
+            : text.Trim()[..Math.Min(text.Trim().Length, 800)];
+        ThoughtBubble.Visibility = Visibility.Visible;
+        _thoughtTimer.Stop();
+        _thoughtTimer.Start();
+    }
 
     public RenderSnapshot Snapshot
     {
@@ -385,9 +421,9 @@ public partial class OverlayWindow : Window
         SetMenuOpen(false);
     }
 
-    private void OnModeButtonClick(object sender, RoutedEventArgs e)
+    private void OnAiInsightButtonClick(object sender, RoutedEventArgs e)
     {
-        SafeEventDispatcher.Publish(ModeToggleRequested, ReportInputError);
+        SafeEventDispatcher.Publish(AiInsightRequested, ReportInputError);
         SetMenuOpen(false);
     }
 
@@ -489,6 +525,24 @@ public partial class OverlayWindow : Window
 
     private static void ReportInputError(Exception exception) =>
         Trace.TraceError("桌面互动回调失败：{0}", exception);
+
+    private static string NeedBand(double value) =>
+        value < 0.34 ? "低" : value < 0.67 ? "中" : "高";
+
+    private static string MoodName(PetMood mood) => mood switch
+    {
+        PetMood.Happy => "愉悦",
+        PetMood.Curious => "好奇",
+        PetMood.Hungry => "饥饿",
+        PetMood.Sleepy => "困倦",
+        PetMood.Hurt => "受伤",
+        PetMood.Alert => "警觉",
+        PetMood.Angry => "生气",
+        _ => "平静"
+    };
+
+    private static string ModeName(PetMode mode) =>
+        mode == PetMode.Berserk ? "狂暴" : "常态";
 
     private void OnRuntimeSnapshotChanged(object? sender, RenderSnapshot snapshot)
     {
