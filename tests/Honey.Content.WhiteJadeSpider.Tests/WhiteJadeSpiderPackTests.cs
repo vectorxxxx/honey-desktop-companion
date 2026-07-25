@@ -66,15 +66,45 @@ public sealed class WhiteJadeSpiderPackTests
     }
 
     [Fact]
-    public void 初始状态_由物种包创建并使用物种清单标识()
+    public void 行为评分_非有限需求仍返回有限归一值()
+    {
+        var pack = new WhiteJadeSpiderPack();
+        var state = pack.CreateInitialState(DateTimeOffset.UnixEpoch) with
+        {
+            Needs = new PetNeeds(
+                double.NaN,
+                double.PositiveInfinity,
+                double.NegativeInfinity,
+                0.5,
+                double.PositiveInfinity)
+        };
+
+        foreach (var behavior in pack.Behaviors)
+        {
+            var score = behavior.Score(state);
+
+            Assert.True(double.IsFinite(score), $"{behavior.Key} 的评分必须为有限值。");
+            Assert.InRange(score, 0, 1);
+        }
+    }
+
+    [Fact]
+    public void 初始状态_可通过物种包抽象创建()
     {
         var now = new DateTimeOffset(2026, 7, 25, 12, 0, 0, TimeSpan.Zero);
-        var pack = new WhiteJadeSpiderPack();
+        ISpeciesPack pack = new WhiteJadeSpiderPack();
 
         var state = pack.CreateInitialState(now);
 
+        Assert.NotEqual(Guid.Empty, state.PetId);
         Assert.Equal(pack.Manifest.SpeciesId, state.SpeciesId);
+        Assert.Equal(new PetNeeds(0.25, 0.85, 0.65, 0.5, 0.1), state.Needs);
+        Assert.Equal(PetMood.Curious, state.Mood);
         Assert.Equal(now, state.UpdatedAt);
         Assert.Equal(PetMode.Normal, state.Mode);
+        Assert.Equal(0.75, state.X);
+        Assert.Equal(0.75, state.Y);
+        Assert.Equal(1, state.Scale);
+        Assert.Null(state.PreviousBehavior);
     }
 }

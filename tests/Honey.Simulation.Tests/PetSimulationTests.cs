@@ -52,12 +52,28 @@ public sealed class PetSimulationTests
     [Fact]
     public void Step_负步长不会改变需求或倒退时间()
     {
-        var state = CreateState(PetMode.Normal, stress: 0.2);
+        var state = CreateState(PetMode.Normal, stress: 0.2) with
+        {
+            UpdatedAt = DateTimeOffset.MinValue
+        };
 
         var result = new PetSimulation().Step(state, TimeSpan.FromSeconds(-2), random01: 0.5);
 
         Assert.Equal(state.Needs, result.State.Needs);
-        Assert.Equal(state.UpdatedAt, result.State.UpdatedAt);
+        Assert.Equal(DateTimeOffset.MinValue, result.State.UpdatedAt);
+    }
+
+    [Fact]
+    public void Step_最大时间戳遇到正步长时饱和且不抛异常()
+    {
+        var state = CreateState(PetMode.Normal, stress: 0.2) with
+        {
+            UpdatedAt = DateTimeOffset.MaxValue
+        };
+
+        var result = new PetSimulation().Step(state, TimeSpan.FromSeconds(1), random01: 0.5);
+
+        Assert.Equal(DateTimeOffset.MaxValue, result.State.UpdatedAt);
     }
 
     [Fact]

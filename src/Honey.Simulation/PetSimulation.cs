@@ -40,10 +40,29 @@ public sealed class PetSimulation
         {
             Needs = needs,
             Mode = mode,
-            UpdatedAt = snapshot.State.UpdatedAt + snapshot.AppliedElapsed
+            UpdatedAt = AdvanceTimestamp(
+                snapshot.State.UpdatedAt,
+                snapshot.AppliedElapsed)
         };
 
         return new SimulationResult(nextState, events);
+    }
+
+    private static DateTimeOffset AdvanceTimestamp(
+        DateTimeOffset timestamp,
+        TimeSpan elapsed)
+    {
+        if (elapsed <= TimeSpan.Zero)
+        {
+            return timestamp;
+        }
+
+        var localCapacity = DateTimeOffset.MaxValue.Ticks - timestamp.Ticks;
+        var utcCapacity = DateTimeOffset.MaxValue.UtcTicks - timestamp.UtcTicks;
+
+        return elapsed.Ticks > Math.Min(localCapacity, utcCapacity)
+            ? DateTimeOffset.MaxValue
+            : timestamp + elapsed;
     }
 
     private static IReadOnlyList<IDomainEvent> BuildEvents(

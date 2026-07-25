@@ -41,4 +41,6 @@ public interface ISpeciesPack
     IReadOnlyList<IInteractionRule> Interactions { get; }
 
     IProgressionPolicy Progression { get; }
+
+    PetState CreateInitialState(DateTimeOffset now);
 }

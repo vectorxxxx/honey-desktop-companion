@@ -14,6 +14,7 @@ public sealed record PetState(
     BehaviorKey? PreviousBehavior,
     DateTimeOffset UpdatedAt)
 {
+    [Obsolete("请通过 ISpeciesPack.CreateInitialState 创建物种状态。", false)]
     public static PetState CreateWhiteJadeSpider(DateTimeOffset now) => new(
         Guid.NewGuid(),
         "honey.white-jade-spider",

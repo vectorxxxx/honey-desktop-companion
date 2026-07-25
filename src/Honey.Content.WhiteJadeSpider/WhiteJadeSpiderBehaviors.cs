@@ -13,7 +13,17 @@ internal sealed class WhiteJadeSpiderBehavior(
 
     public TimeSpan Cooldown { get; } = cooldown;
 
-    public double Score(PetState state) => Math.Clamp(score(state), 0, 1);
+    public double Score(PetState state) => Normalize(score(state));
+
+    private static double Normalize(double value)
+    {
+        if (!double.IsFinite(value))
+        {
+            return double.IsPositiveInfinity(value) ? 1 : 0;
+        }
+
+        return Math.Clamp(value, 0, 1);
+    }
 }
 
 internal static class WhiteJadeSpiderBehaviors
