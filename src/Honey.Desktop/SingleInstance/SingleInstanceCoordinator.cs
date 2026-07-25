@@ -13,13 +13,15 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
     private static readonly TimeSpan MessageTimeout = TimeSpan.FromMilliseconds(1000);
 
     private readonly Mutex _mutex;
+    private readonly Action<Exception>? _errorSink;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly object _disposeSync = new();
     private Task? _listenerTask;
     private Task? _disposeTask;
 
-    public SingleInstanceCoordinator()
+    public SingleInstanceCoordinator(Action<Exception>? errorSink = null)
     {
+        _errorSink = errorSink;
         _mutex = new Mutex(initiallyOwned: false, MutexName, out var createdNew);
         IsPrimary = createdNew;
     }
@@ -39,7 +41,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
             throw new InvalidOperationException("命令监听已经启动。");
         }
 
-        _listenerTask = ListenAsync(commandHandler, _stopSource.Token);
+        _listenerTask = ListenAsync(commandHandler, _errorSink, _stopSource.Token);
     }
 
     public async Task<bool> SendShowAsync(CancellationToken cancellationToken = default)
@@ -80,6 +82,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
 
     private static async Task ListenAsync(
         Func<SingleInstanceCommand, Task> commandHandler,
+        Action<Exception>? errorSink,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -115,7 +118,16 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
 
                 if (SingleInstanceMessage.TryParse(buffer.AsSpan(0, bytesRead), out var command))
                 {
-                    await commandHandler(command).ConfigureAwait(false);
+                    var shouldContinue = await HandleCommandAsync(
+                            commandHandler,
+                            command,
+                            errorSink,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (!shouldContinue)
+                    {
+                        break;
+                    }
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -136,6 +148,55 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
             }
         }
     }
+
+    private static async Task<bool> HandleCommandAsync(
+        Func<SingleInstanceCommand, Task> commandHandler,
+        SingleInstanceCommand command,
+        Action<Exception>? errorSink,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await commandHandler(command).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception error) when (!IsProgramFatal(error))
+        {
+            ObserveError(errorSink, error);
+            await DelayAfterFailure(cancellationToken).ConfigureAwait(false);
+            return !cancellationToken.IsCancellationRequested;
+        }
+    }
+
+    private static void ObserveError(Action<Exception>? errorSink, Exception error)
+    {
+        if (errorSink is null)
+        {
+            return;
+        }
+
+        try
+        {
+            errorSink(error);
+        }
+        catch (Exception sinkError) when (!IsProgramFatal(sinkError))
+        {
+            // 错误观察入口不能反向击穿单实例监听。
+        }
+    }
+
+    private static bool IsProgramFatal(Exception error) =>
+        error is OutOfMemoryException
+            or StackOverflowException
+            or AccessViolationException
+            or AppDomainUnloadedException
+            or BadImageFormatException
+            or CannotUnloadAppDomainException
+            or InvalidProgramException;
 
     private static async Task DelayAfterFailure(CancellationToken cancellationToken)
     {
