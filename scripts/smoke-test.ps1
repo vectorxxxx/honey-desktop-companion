@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ExePath,
     [string]$DataRoot,
+    [string]$InstanceId = ([Guid]::NewGuid().ToString("N")),
     [int]$TimeoutSeconds = 15,
     [int]$StabilitySeconds = 12,
     [switch]$KeepData
@@ -34,8 +35,33 @@ function Wait-ProcessState {
 function Start-Honey {
     param([string]$Command)
     Start-Process -FilePath $executable `
-        -ArgumentList @($Command, "--data-root", "`"$DataRoot`"") `
+        -ArgumentList @(
+            $Command,
+            "--data-root",
+            "`"$DataRoot`"",
+            "--instance-id",
+            $InstanceId) `
         -PassThru
+}
+
+function Get-IsolatedHoneyProcesses {
+    @(Get-CimInstance Win32_Process -Filter "Name = 'Honey.exe'" |
+        Where-Object {
+            [string]::Equals(
+                $_.ExecutablePath,
+                $executable,
+                [StringComparison]::OrdinalIgnoreCase) -and
+            $_.CommandLine -match [Regex]::Escape($InstanceId)
+        })
+}
+
+function Assert-IsolatedCount {
+    param([int]$Expected)
+    $matches = @(Get-IsolatedHoneyProcesses)
+    if ($matches.Count -ne $Expected) {
+        throw "Expected $Expected isolated Honey process(es), found $($matches.Count)."
+    }
+    return $matches
 }
 
 function Wait-HoneyStable {
@@ -83,41 +109,69 @@ try {
 
     $primary = Start-Honey "--background"
     Wait-ProcessState -Id $primary.Id -ShouldExist $true
+    $earlyShow = Start-Honey "--show"
+    if (-not $earlyShow.WaitForExit($TimeoutSeconds * 1000)) {
+        throw "Show command during primary initialization timed out."
+    }
+    if ($earlyShow.ExitCode -ne 0) {
+        throw "Show command during primary initialization was not acknowledged."
+    }
     Wait-HoneyStable -Process $primary
+    $matches = @(Assert-IsolatedCount -Expected 1)
+    if ($matches[0].ProcessId -ne $primary.Id) {
+        throw "Isolated process identity does not match the launched primary."
+    }
 
     $secondary = Start-Honey "--background"
     if (-not $secondary.WaitForExit($TimeoutSeconds * 1000)) {
         throw "Secondary instance did not exit."
     }
     if ($primary.HasExited) { throw "Primary instance was replaced by the secondary instance." }
+    $null = Assert-IsolatedCount -Expected 1
 
     $show = Start-Honey "--show"
     if (-not $show.WaitForExit($TimeoutSeconds * 1000)) {
         throw "Show command did not return."
     }
     if ($primary.HasExited) { throw "Show command terminated the primary instance." }
+    $null = Assert-IsolatedCount -Expected 1
 
     Stop-IsolatedHoney
     $primary = $null
+    $null = Assert-IsolatedCount -Expected 0
 
     $database = Join-Path $DataRoot "honey.db"
     if (-not (Test-Path -LiteralPath $database -PathType Leaf)) {
         throw "SQLite archive was not created."
     }
-    $stream = [IO.File]::Open($database, "Open", "Read", "ReadWrite")
-    try {
-        $header = New-Object byte[] 16
-        if ($stream.Read($header, 0, $header.Length) -ne 16) {
-            throw "SQLite archive is too short."
-        }
-        $signature = [Text.Encoding]::ASCII.GetString($header)
-        if ($signature -ne "SQLite format 3`0") {
-            throw "SQLite archive header is invalid."
-        }
+    $verifier = Start-Honey "--verify-data"
+    if (-not $verifier.WaitForExit($TimeoutSeconds * 1000)) {
+        throw "SQLite deep verification timed out."
     }
-    finally {
-        $stream.Dispose()
+    if ($verifier.ExitCode -ne 0) {
+        throw "SQLite deep verification failed with exit code $($verifier.ExitCode)."
     }
+
+    $corruptRoot = Join-Path $DataRoot "corrupt-probe"
+    New-Item -ItemType Directory -Force -Path $corruptRoot | Out-Null
+    [IO.File]::WriteAllBytes(
+        (Join-Path $corruptRoot "honey.db"),
+        [Text.Encoding]::ASCII.GetBytes("not-a-sqlite-database"))
+    $corruptVerifier = Start-Process -FilePath $executable `
+        -ArgumentList @(
+            "--verify-data",
+            "--data-root",
+            "`"$corruptRoot`"",
+            "--instance-id",
+            $InstanceId) `
+        -PassThru
+    if (-not $corruptVerifier.WaitForExit($TimeoutSeconds * 1000)) {
+        throw "Corrupt SQLite verification did not return."
+    }
+    if ($corruptVerifier.ExitCode -eq 0) {
+        throw "Corrupt SQLite archive was incorrectly accepted."
+    }
+    Remove-Item -LiteralPath $corruptRoot -Recurse -Force
 
     $primary = Start-Honey "--background"
     Wait-ProcessState -Id $primary.Id -ShouldExist $true
@@ -125,6 +179,7 @@ try {
     if ($primary.HasExited) { throw "Restarted instance exited unexpectedly." }
     Stop-IsolatedHoney
     $primary = $null
+    $null = Assert-IsolatedCount -Expected 0
 
     Write-Host ("Smoke test passed. No-instance shutdown: {0:N0} ms" -f $watch.Elapsed.TotalMilliseconds)
     Write-Host ("Data root: {0}" -f $DataRoot)

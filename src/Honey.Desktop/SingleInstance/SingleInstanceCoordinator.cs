@@ -6,8 +6,9 @@ namespace Honey.Desktop.SingleInstance;
 public sealed class SingleInstanceCoordinator : IAsyncDisposable
 {
     private const int MaximumMessageBytes = 32;
-    private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromMilliseconds(1500);
-    private static readonly TimeSpan MessageTimeout = TimeSpan.FromMilliseconds(1000);
+    private static readonly TimeSpan AttemptTimeout = TimeSpan.FromMilliseconds(1250);
+    private const int SendAttempts = 3;
+    private static readonly byte[] Acknowledgement = "ok\n"u8.ToArray();
 
     private readonly Mutex _mutex;
     private readonly SingleInstanceIdentity _identity;
@@ -61,29 +62,48 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
         SingleInstanceCommand command,
         CancellationToken cancellationToken = default)
     {
-        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(ConnectionTimeout);
-        try
+        for (var attempt = 0; attempt < SendAttempts; attempt++)
         {
-            await using var client = new NamedPipeClientStream(
-                ".",
-                _identity.PipeName,
-                PipeDirection.Out,
-                PipeOptions.Asynchronous);
-            await client.ConnectAsync(timeoutSource.Token).ConfigureAwait(false);
-            await client.WriteAsync(SingleInstanceMessage.Serialize(command), timeoutSource.Token)
-                .ConfigureAwait(false);
-            await client.FlushAsync(timeoutSource.Token).ConfigureAwait(false);
-            return true;
+            using var timeoutSource =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutSource.CancelAfter(AttemptTimeout);
+            try
+            {
+                await using var client = new NamedPipeClientStream(
+                    ".",
+                    _identity.PipeName,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous);
+                await client.ConnectAsync(timeoutSource.Token).ConfigureAwait(false);
+                await client.WriteAsync(
+                        SingleInstanceMessage.Serialize(command),
+                        timeoutSource.Token)
+                    .ConfigureAwait(false);
+                await client.FlushAsync(timeoutSource.Token).ConfigureAwait(false);
+                var response = new byte[Acknowledgement.Length];
+                await client.ReadExactlyAsync(response, timeoutSource.Token).ConfigureAwait(false);
+                return response.AsSpan().SequenceEqual(Acknowledgement);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (
+                exception is OperationCanceledException
+                    or IOException
+                    or UnauthorizedAccessException)
+            {
+                if (attempt + 1 < SendAttempts)
+                {
+                    await Task.Delay(
+                            TimeSpan.FromMilliseconds(50),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
         }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
+
+        return false;
     }
 
     public ValueTask DisposeAsync()
@@ -107,7 +127,7 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
             {
                 await using var server = new NamedPipeServerStream(
                     pipeName,
-                    PipeDirection.In,
+                    PipeDirection.InOut,
                     1,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly,
@@ -115,8 +135,9 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
                     MaximumMessageBytes);
                 await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                using var messageTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                messageTimeout.CancelAfter(MessageTimeout);
+                using var messageTimeout =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                messageTimeout.CancelAfter(AttemptTimeout);
                 var buffer = new byte[MaximumMessageBytes + 1];
                 var bytesRead = 0;
                 while (bytesRead < buffer.Length)
@@ -130,10 +151,19 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
                     }
 
                     bytesRead += count;
+                    if (buffer.AsSpan(0, bytesRead).Contains((byte)'\n'))
+                    {
+                        break;
+                    }
                 }
 
-                if (SingleInstanceMessage.TryParse(buffer.AsSpan(0, bytesRead), out var command))
+                var newline = buffer.AsSpan(0, bytesRead).IndexOf((byte)'\n');
+                if (newline >= 0
+                    && SingleInstanceMessage.TryParse(buffer.AsSpan(0, newline), out var command))
                 {
+                    await server.WriteAsync(Acknowledgement, messageTimeout.Token)
+                        .ConfigureAwait(false);
+                    await server.FlushAsync(messageTimeout.Token).ConfigureAwait(false);
                     var shouldContinue = await HandleCommandAsync(
                             commandHandler,
                             command,
@@ -247,4 +277,5 @@ public sealed class SingleInstanceCoordinator : IAsyncDisposable
             _mutex.Dispose();
         }
     }
+
 }

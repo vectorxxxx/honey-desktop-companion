@@ -21,12 +21,14 @@ Honey 是面向 Windows 11 x64 的桌面灵宠。首版提供白玉蜘蛛“小�
 Honey.exe --background
 Honey.exe --show
 Honey.exe --shutdown
+Honey.exe --verify-data
 Honey.exe --show --data-root "D:\HoneyData"
 ```
 
 - `--background`：在后台启动，不主动显示灵宠窗口。
 - `--show`：启动新实例，或通知已有实例显示灵宠。
 - `--shutdown`：请求已有实例保存状态并安全退出；没有实例时会快速成功，不创建存档。
+- `--verify-data`：无界面、无托盘地只读验证当前数据目录中的 SQLite 存档，成功返回退出码 0，损坏或缺少状态返回退出码 4。
 - `--data-root <目录>`：使用独立的数据、设置、密钥和单实例通道，适合测试或便携隔离。也可设置环境变量 `HONEY_DATA_ROOT`。
 
 同一数据目录只允许一个实例。第二次运行不会重复初始化数据库、托盘或窗口。
@@ -70,6 +72,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\soak-test.ps1 `
 ```
 
 发布脚本会先还原并运行全部 Release 测试，再生成 `artifacts\win-x64\Honey.exe`，最后打印文件大小与 SHA-256。`artifacts\` 不进入 Git。
+脚本会在安全校验后清空精确的输出目录，并递归确认交付目录最终只有根目录下的 `Honey.exe`。默认只允许仓库 `artifacts` 内的输出；确需发布到其他安全目录时必须显式传入 `-AllowExternalOutput`，盘符根目录和仓库根目录始终拒绝。
+
+冒烟测试使用唯一隔离标识精确核对本次 `Honey.exe` 的进程数量，不会操作其他 Honey 进程；存档验收会实际打开 SQLite，执行 `quick_check`、`integrity_check`、架构与状态查询，并确认损坏探针会被拒绝。
 
 浸泡测试默认 8 小时，每 30 秒采样一次。验收门槛为空闲平均 CPU 小于 1%、稳定工作集小于 150 MB、最后 4 小时线性增长小于 20 MB，并且进程无异常退出。开发时可用 `-DurationSeconds`、`-SampleSeconds` 和 `-WarmupSeconds` 做短时脚本验证；短时结果不能替代正式 8 小时验收。
 

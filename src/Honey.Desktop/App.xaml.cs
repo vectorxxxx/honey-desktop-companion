@@ -51,6 +51,8 @@ public partial class App : System.Windows.Application
     private int _sessionEndingBridgeUsed;
     private static readonly TimeSpan BlockingShutdownTimeout = TimeSpan.FromSeconds(4);
     private TextWriterTraceListener? _logListener;
+    private CancellationTokenSource? _startupCancellation;
+    private StartupCommandInbox? _startupCommandInbox;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -70,23 +72,48 @@ public partial class App : System.Windows.Application
         var configuredDataRoot = startup.DataRoot
             ?? Environment.GetEnvironmentVariable("HONEY_DATA_ROOT");
         var paths = new AppDataPaths(configuredDataRoot);
+        if (startup.Command == StartupCommand.VerifyData)
+        {
+            try
+            {
+                await SqliteArchiveVerifier.VerifyAsync(
+                    paths.DatabasePath,
+                    CancellationToken.None);
+                Shutdown(0);
+            }
+            catch (Exception exception) when (
+                exception is InvalidDataException
+                    or IOException
+                    or UnauthorizedAccessException)
+            {
+                Trace.TraceError("存档自检失败：{0}", exception);
+                Shutdown(4);
+            }
+            return;
+        }
+
         var identity = SingleInstanceIdentity.Create(paths.RootDirectory);
         _singleInstance = new SingleInstanceCoordinator(identity);
         if (!_singleInstance.IsPrimary)
         {
+            var delivered = true;
             if (startup.Command != StartupCommand.Background)
             {
                 var command = startup.Command == StartupCommand.Shutdown
                     ? SingleInstanceCommand.Shutdown
                     : SingleInstanceCommand.Show;
-                await _singleInstance.SendAsync(command);
+                delivered = await _singleInstance.SendAsync(command);
             }
             await _singleInstance.DisposeAsync();
             _singleInstance = null;
-            Shutdown();
+            Shutdown(delivered ? 0 : 3);
             return;
         }
 
+        _startupCancellation = new CancellationTokenSource();
+        _startupCommandInbox = new StartupCommandInbox(
+            () => _startupCancellation.Cancel());
+        _singleInstance.StartListening(_startupCommandInbox.HandleAsync);
         if (startup.Command == StartupCommand.Shutdown)
         {
             await _singleInstance.DisposeAsync();
@@ -95,6 +122,10 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        var startupToken = _startupCancellation.Token;
+        try
+        {
+        startupToken.ThrowIfCancellationRequested();
         paths.EnsureDirectories();
         _logListener = AppTraceLog.Create(paths.LogsDirectory);
         Trace.Listeners.Add(_logListener);
@@ -103,7 +134,11 @@ public partial class App : System.Windows.Application
             Path.Combine(paths.RootDirectory, "secrets.json"));
         try
         {
-            _aiSecret = await _secretStore.LoadBoundAsync(CancellationToken.None);
+            _aiSecret = await _secretStore.LoadBoundAsync(startupToken);
+        }
+        catch (OperationCanceledException) when (startupToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception)
         {
@@ -124,7 +159,11 @@ public partial class App : System.Windows.Application
             Path.Combine(paths.RootDirectory, "settings.json"));
         try
         {
-            _settings = await _settingsStore.LoadAsync(CancellationToken.None);
+            _settings = await _settingsStore.LoadAsync(startupToken);
+        }
+        catch (OperationCanceledException) when (startupToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception)
         {
@@ -143,8 +182,9 @@ public partial class App : System.Windows.Application
             exception => Trace.TraceError(
                 "存档读取失败，原记录保持不变并以固定主宠继续：{0}",
                 exception),
-            CancellationToken.None);
+            startupToken);
 
+        startupToken.ThrowIfCancellationRequested();
         var displayBounds = new DisplayBoundsService();
         _overlayWindow = new OverlayWindow(
             displayBounds,
@@ -190,8 +230,9 @@ public partial class App : System.Windows.Application
             }).Task,
             ReportShutdownError);
 
+        await _startupCommandInbox.AttachAsync(HandleReadySingleInstanceCommandAsync);
+        startupToken.ThrowIfCancellationRequested();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
-        _singleInstance.StartListening(HandleSingleInstanceCommandAsync);
         _focusMode.Changed += OnFocusSnapshotChanged;
         _saveTimer = new System.Threading.Timer(
             _ => _periodicSaveQueue.TryEnqueue(SavePetStateSafelyAsync),
@@ -206,6 +247,16 @@ public partial class App : System.Windows.Application
             {
                 OnSettingsRequested(this, EventArgs.Empty);
             }
+        }
+        }
+        catch (OperationCanceledException) when (startupToken.IsCancellationRequested)
+        {
+            if (_singleInstance is not null)
+            {
+                await _singleInstance.DisposeAsync();
+                _singleInstance = null;
+            }
+            Shutdown();
         }
     }
 
@@ -241,6 +292,9 @@ public partial class App : System.Windows.Application
         _runtimeLifecycle = null;
         _singleInstance = null;
         _shutdownCoordinator = null;
+        _startupCommandInbox = null;
+        _startupCancellation?.Dispose();
+        _startupCancellation = null;
         if (_logListener is not null)
         {
             Trace.Listeners.Remove(_logListener);
@@ -260,7 +314,7 @@ public partial class App : System.Windows.Application
         base.OnSessionEnding(e);
     }
 
-    private Task HandleSingleInstanceCommandAsync(SingleInstanceCommand command)
+    private Task HandleReadySingleInstanceCommandAsync(SingleInstanceCommand command)
     {
         if (command == SingleInstanceCommand.Shutdown)
         {

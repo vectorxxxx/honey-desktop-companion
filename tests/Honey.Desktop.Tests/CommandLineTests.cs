@@ -8,6 +8,7 @@ public sealed class CommandLineTests
     [InlineData("--background", StartupCommand.Background)]
     [InlineData("--show", StartupCommand.Show)]
     [InlineData("--shutdown", StartupCommand.Shutdown)]
+    [InlineData("--verify-data", StartupCommand.VerifyData)]
     public void Parse_识别生命周期命令(string argument, StartupCommand expected)
     {
         Assert.Equal(expected, StartupArguments.Parse([argument]).Command);
@@ -39,5 +40,14 @@ public sealed class CommandLineTests
     public void Parse_拒绝缺少值的数据目录()
     {
         Assert.Throws<ArgumentException>(() => StartupArguments.Parse(["--data-root"]));
+    }
+
+    [Fact]
+    public void Parse_读取烟测隔离标识()
+    {
+        var parsed = StartupArguments.Parse(
+            ["--background", "--instance-id", "1234567890abcdef"]);
+
+        Assert.Equal("1234567890abcdef", parsed.InstanceId);
     }
 }

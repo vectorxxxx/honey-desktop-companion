@@ -1,11 +1,13 @@
 param(
     [string]$Configuration = "Release",
     [string]$Output = "artifacts/win-x64",
-    [string]$DotnetPath
+    [string]$DotnetPath,
+    [switch]$AllowExternalOutput
 )
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "publish-safety.ps1")
 
 function Resolve-Dotnet {
     param([string]$ExplicitPath)
@@ -35,12 +37,10 @@ $previousDotnetRoot = $env:DOTNET_ROOT
 $previousNodeReuse = $env:MSBUILDDISABLENODEREUSE
 $env:DOTNET_ROOT = Split-Path -Parent $dotnet
 $env:MSBUILDDISABLENODEREUSE = "1"
-$outputPath = if ([IO.Path]::IsPathRooted($Output)) {
-    [IO.Path]::GetFullPath($Output)
-}
-else {
-    [IO.Path]::GetFullPath((Join-Path $repo $Output))
-}
+$outputPath = Resolve-SafePublishOutput `
+    -RepositoryRoot $repo `
+    -Output $Output `
+    -AllowExternalOutput:$AllowExternalOutput
 
 Push-Location $repo
 try {
@@ -57,7 +57,10 @@ try {
         --source "https://api.nuget.org/v3/index.json"
     if ($LASTEXITCODE -ne 0) { throw "Publish restore failed: $LASTEXITCODE" }
 
-    New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
+    $outputPath = Reset-SafePublishOutput `
+        -RepositoryRoot $repo `
+        -Output $outputPath `
+        -AllowExternalOutput:$AllowExternalOutput
     & $dotnet publish src/Honey.Desktop/Honey.Desktop.csproj `
         -c $Configuration `
         -r win-x64 `
@@ -75,12 +78,19 @@ try {
         throw "Publish did not produce Honey.exe."
     }
 
-    Get-ChildItem -LiteralPath $outputPath -File -Filter "*.pdb" |
+    Get-ChildItem -LiteralPath $outputPath -Recurse -File -Filter "*.pdb" |
         ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
-    $unexpected = @(Get-ChildItem -LiteralPath $outputPath -File |
-        Where-Object Name -ne "Honey.exe")
-    if ($unexpected.Count -gt 0) {
-        throw "Single-file output contains unexpected files: $($unexpected.Name -join ', ')"
+    Get-ChildItem -LiteralPath $outputPath -Recurse -Directory |
+        Sort-Object FullName -Descending |
+        Where-Object { @(Get-ChildItem -LiteralPath $_.FullName -Force).Count -eq 0 } |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+    $entries = @(Get-ChildItem -LiteralPath $outputPath -Recurse -Force)
+    if ($entries.Count -ne 1 -or
+        -not [string]::Equals(
+            $entries[0].FullName,
+            $executable,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Single-file output must recursively contain only root Honey.exe."
     }
 
     $item = Get-Item -LiteralPath $executable

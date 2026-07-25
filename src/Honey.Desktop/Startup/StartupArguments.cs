@@ -4,16 +4,21 @@ public enum StartupCommand
 {
     Background,
     Show,
-    Shutdown
+    Shutdown,
+    VerifyData
 }
 
-public sealed record StartupArguments(StartupCommand Command, string? DataRoot)
+public sealed record StartupArguments(
+    StartupCommand Command,
+    string? DataRoot,
+    string? InstanceId)
 {
     public static StartupArguments Parse(IReadOnlyList<string> arguments)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         StartupCommand? command = null;
         string? dataRoot = null;
+        string? instanceId = null;
 
         for (var index = 0; index < arguments.Count; index++)
         {
@@ -23,6 +28,7 @@ public sealed record StartupArguments(StartupCommand Command, string? DataRoot)
                 "--background" => StartupCommand.Background,
                 "--show" => StartupCommand.Show,
                 "--shutdown" => StartupCommand.Shutdown,
+                "--verify-data" => StartupCommand.VerifyData,
                 _ => null
             };
             if (candidate is not null)
@@ -47,6 +53,20 @@ public sealed record StartupArguments(StartupCommand Command, string? DataRoot)
                 continue;
             }
 
+            if (string.Equals(argument, "--instance-id", StringComparison.OrdinalIgnoreCase))
+            {
+                if (++index >= arguments.Count
+                    || string.IsNullOrWhiteSpace(arguments[index])
+                    || arguments[index].Length > 64
+                    || arguments[index].Any(character => !char.IsAsciiLetterOrDigit(character)))
+                {
+                    throw new ArgumentException("--instance-id 必须是 1 至 64 位 ASCII 字母或数字。", nameof(arguments));
+                }
+
+                instanceId = arguments[index];
+                continue;
+            }
+
             if (string.Equals(argument, "--settings", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -55,6 +75,6 @@ public sealed record StartupArguments(StartupCommand Command, string? DataRoot)
             throw new ArgumentException($"无法识别的启动参数：{argument}", nameof(arguments));
         }
 
-        return new StartupArguments(command ?? StartupCommand.Show, dataRoot);
+        return new StartupArguments(command ?? StartupCommand.Show, dataRoot, instanceId);
     }
 }
