@@ -30,6 +30,8 @@ public partial class App : System.Windows.Application
     private string? _aiApiKey;
     private HttpClient? _aiHttpClient;
     private AiCompanionCoordinator? _aiCoordinator;
+    private AiRequestGate? _aiRequestGate;
+    private AiConnectionTester? _aiConnectionTester;
     private FocusModeService? _focusMode;
     private SqlitePetStateStore? _petStateStore;
     private IPetRuntimeLifecycle? _runtimeLifecycle;
@@ -68,7 +70,9 @@ public partial class App : System.Windows.Application
             Trace.TraceError("AI 密钥读取失败，保持 AI 本地降级：{0}", exception);
         }
         _aiHttpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
-        _aiCoordinator = new AiCompanionCoordinator(CreateAiProvider);
+        _aiRequestGate = new AiRequestGate();
+        _aiConnectionTester = new AiConnectionTester(_aiRequestGate);
+        _aiCoordinator = new AiCompanionCoordinator(CreateAiProvider, _aiRequestGate);
         _settingsStore = new SettingsStore();
         try
         {
@@ -177,6 +181,8 @@ public partial class App : System.Windows.Application
         _settingsFocusLease = null;
         _settingsWindow = null;
         _aiCoordinator = null;
+        _aiConnectionTester = null;
+        _aiRequestGate = null;
         _aiHttpClient?.Dispose();
         _aiHttpClient = null;
         _aiApiKey = null;
@@ -344,7 +350,7 @@ public partial class App : System.Windows.Application
 
         try
         {
-            if (_aiHttpClient is null)
+            if (_aiHttpClient is null || _aiConnectionTester is null)
             {
                 return "测试失败：AI 网络组件尚未初始化。";
             }
@@ -356,7 +362,8 @@ public partial class App : System.Windows.Application
                     settings.AiModel,
                     key,
                     AiOptions.DefaultTimeout));
-            var result = await provider.CompleteAsync(
+            var result = await _aiConnectionTester.TestAsync(
+                provider,
                 new AiCompanionRequest(
                     "请用一句简短中文回应连接测试。",
                     "情绪：平静；形态：常态；行为：观察；需求：均衡",
@@ -460,6 +467,7 @@ public partial class App : System.Windows.Application
     {
         "disabled" => "AI 尚未启用或未配置密钥，我先按自己的节奏玩耍。",
         "busy" => "我正在想上一件事，请稍等一下。",
+        "cooldown" => "请求刚刚完成，请稍后再试。",
         "timeout" => "远方回应有些慢，我先继续探索。",
         "auth" => "AI 密钥未通过验证，请到设置中检查。",
         "rate_limited" => "今天的灵感稍显拥挤，稍后再试。",

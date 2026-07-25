@@ -1,13 +1,22 @@
 namespace Honey.Integrations.Ai;
 
-public sealed class AiCompanionCoordinator(Func<IAiCompanionProvider?> providerFactory)
+public sealed class AiCompanionCoordinator
 {
     private static readonly HashSet<string> AllowedIntents =
         new(StringComparer.Ordinal)
         {
             "observe", "play", "sleep", "forage", "web"
         };
-    private int _requestInFlight;
+    private readonly Func<IAiCompanionProvider?> _providerFactory;
+    private readonly AiRequestGate _gate;
+
+    public AiCompanionCoordinator(
+        Func<IAiCompanionProvider?> providerFactory,
+        AiRequestGate? gate = null)
+    {
+        _providerFactory = providerFactory ?? throw new ArgumentNullException(nameof(providerFactory));
+        _gate = gate ?? new AiRequestGate();
+    }
 
     public async Task<AiCompanionResult> RequestAsync(
         AiCompanionRequest request,
@@ -17,19 +26,19 @@ public sealed class AiCompanionCoordinator(Func<IAiCompanionProvider?> providerF
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(routeSuggestedIntent);
         cancellationToken.ThrowIfCancellationRequested();
-        if (Interlocked.CompareExchange(ref _requestInFlight, 1, 0) != 0)
+        var provider = _providerFactory();
+        if (provider is null)
         {
-            return new AiCompanionResult(false, null, null, "busy");
+            return new AiCompanionResult(false, null, null, "disabled");
         }
 
-        try
+        if (!_gate.TryAcquire(out var lease, out var failureCode))
         {
-            var provider = providerFactory();
-            if (provider is null)
-            {
-                return new AiCompanionResult(false, null, null, "disabled");
-            }
+            return new AiCompanionResult(false, null, null, failureCode);
+        }
 
+        using (lease)
+        {
             AiCompanionResult result;
             try
             {
@@ -59,10 +68,6 @@ public sealed class AiCompanionCoordinator(Func<IAiCompanionProvider?> providerF
             }
 
             return result with { SuggestedIntent = intent };
-        }
-        finally
-        {
-            Volatile.Write(ref _requestInFlight, 0);
         }
     }
 }

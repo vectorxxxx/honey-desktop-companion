@@ -8,6 +8,7 @@ public partial class SettingsWindow : Window
 {
     private readonly Func<AiSettingsSubmission, CancellationToken, Task> _save;
     private readonly Func<AppSettings, string?, CancellationToken, Task<string>> _testAi;
+    private readonly AiSettingsTestController _testController = new();
     private bool _hasStoredKey;
     private bool _clearKey;
 
@@ -24,6 +25,7 @@ public partial class SettingsWindow : Window
         Apply(settings.Normalize());
         UpdateKeyStatus();
         PreviewKeyDown += OnPreviewKeyDown;
+        Closed += (_, _) => _testController.Cancel();
     }
 
     private AppSettings Read() => new()
@@ -114,11 +116,18 @@ public partial class SettingsWindow : Window
                 return;
             }
 
-            ErrorText.Text = await _testAi(Read().Normalize(), key, CancellationToken.None);
+            TestAiButton.IsEnabled = false;
+            ErrorText.Text = await _testController.RunAsync(
+                token => _testAi(Read().Normalize(), key, token),
+                CancellationToken.None);
         }
         catch (Exception exception)
         {
             ErrorText.Text = $"测试失败：{exception.Message}";
+        }
+        finally
+        {
+            TestAiButton.IsEnabled = !_testController.IsRunning;
         }
     }
 

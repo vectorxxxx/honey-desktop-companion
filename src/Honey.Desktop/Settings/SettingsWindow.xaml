@@ -149,7 +149,8 @@
                             <TextBlock x:Name="AiKeyStatus" Foreground="{StaticResource Muted}"
                                        FontSize="11" Margin="0,5,0,0"/>
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,4">
-                                <Button Style="{StaticResource ActionButton}" Margin="0"
+                                <Button x:Name="TestAiButton"
+                                        Style="{StaticResource ActionButton}" Margin="0"
                                         Click="OnTestAiClick" ToolTip="仅此次主动点击会联网"
                                         AutomationProperties.Name="测试 AI 连接" Content="测试连接"/>
                                 <Button Style="{StaticResource ActionButton}"
