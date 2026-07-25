@@ -2,6 +2,7 @@ using Honey.Desktop.SingleInstance;
 
 namespace Honey.Desktop.Tests;
 
+[Collection("单实例进程测试")]
 public sealed class SingleInstanceCoordinatorTests
 {
     [Fact]
