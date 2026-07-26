@@ -17,6 +17,7 @@ public sealed class DesktopLocomotionController
     private LocomotionPoint _target;
     private PixelPoint? _lastPointer;
     private double _pointerInterestSeconds;
+    private TimeSpan _chaseRemaining;
     private TimeSpan _chaseCooldown;
     private bool _hasTarget;
     private bool _paused;
@@ -68,6 +69,7 @@ public sealed class DesktopLocomotionController
             0,
             true);
         _hasTarget = false;
+        _chaseRemaining = TimeSpan.Zero;
         CurrentIntent = LocomotionIntent.Idle;
     }
 
@@ -90,12 +92,32 @@ public sealed class DesktopLocomotionController
         var pointer = _getPointer();
         var pointerStimulus = MeasurePointer(pointer, content, elapsed);
         var snapshot = _snapshot;
-        var intent = PetLocomotionPolicy.Resolve(new PetLocomotionContext(
+        var resolvedIntent = PetLocomotionPolicy.Resolve(new PetLocomotionContext(
             snapshot.Behavior,
             snapshot.Phase,
             snapshot.Mood,
             snapshot.Mode,
             pointerStimulus));
+        if (resolvedIntent == LocomotionIntent.ApproachPointer
+            && _chaseRemaining <= TimeSpan.Zero)
+        {
+            _chaseRemaining = TimeSpan.FromSeconds(1.5);
+            _pointerInterestSeconds = 0;
+        }
+        var intent = _chaseRemaining > TimeSpan.Zero
+            && resolvedIntent is not LocomotionIntent.Anchor
+                and not LocomotionIntent.RetreatPointer
+            ? LocomotionIntent.ApproachPointer
+            : resolvedIntent;
+        if (_chaseRemaining > TimeSpan.Zero)
+        {
+            _chaseRemaining -= elapsed;
+            if (_chaseRemaining <= TimeSpan.Zero)
+            {
+                _chaseRemaining = TimeSpan.Zero;
+                _chaseCooldown = TimeSpan.FromSeconds(3);
+            }
+        }
         var intentChanged = intent != CurrentIntent;
         CurrentIntent = intent;
 
@@ -191,8 +213,6 @@ public sealed class DesktopLocomotionController
         }
         if (intent == LocomotionIntent.ApproachPointer)
         {
-            _chaseCooldown = TimeSpan.FromSeconds(3);
-            _pointerInterestSeconds = 0;
             return bounds.Clamp(new LocomotionPoint(
                 pointer.X - content.X - content.Width / 2d,
                 pointer.Y - content.Y - content.Height / 2d));

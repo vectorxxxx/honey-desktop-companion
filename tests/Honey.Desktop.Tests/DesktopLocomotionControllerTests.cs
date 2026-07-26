@@ -60,14 +60,36 @@ public sealed class DesktopLocomotionControllerTests
         Assert.Equal(0, controller.CurrentFrame.State.Speed);
     }
 
+    [Fact]
+    public void Tick_鼠标引起的靠近会持续追踪而非只移动一帧()
+    {
+        var origin = new PixelPoint(100, 100);
+        var controller = CreateController(
+            () => origin,
+            point => origin = point,
+            () => new PixelPoint(300, 230));
+        controller.UpdateSnapshot(CreateSnapshot(BuiltInBehaviorKeys.Observe));
+
+        for (var index = 0; index < 11; index++)
+        {
+            controller.Tick(TimeSpan.FromMilliseconds(100));
+        }
+        var chaseStart = origin;
+        controller.Tick(TimeSpan.FromMilliseconds(100));
+
+        Assert.Equal(LocomotionIntent.ApproachPointer, controller.CurrentIntent);
+        Assert.NotEqual(chaseStart, origin);
+    }
+
     private static DesktopLocomotionController CreateController(
         Func<PixelPoint> getOrigin,
-        Action<PixelPoint> move) =>
+        Action<PixelPoint> move,
+        Func<PixelPoint>? getPointer = null) =>
         new(
             getOrigin,
             () => new PixelRect(100, 80, 120, 100),
             () => [new PixelRect(0, 0, 800, 600)],
-            () => new PixelPoint(700, 500),
+            getPointer ?? (() => new PixelPoint(700, 500)),
             move,
             WhiteJadeSpiderPack.LocomotionProfile,
             new Random(7));
