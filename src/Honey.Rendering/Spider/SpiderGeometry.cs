@@ -37,24 +37,68 @@ public static class SpiderGeometry
         for (var index = 0; index < layout.Legs.Count; index++)
         {
             var leg = layout.Legs[index];
-            var phase = safe.AnimationTime * cadence + index * Math.PI / 2;
-            var lift = MathF.Sin((float)phase) * leg.Width * moodAmplitude;
+            var moving = safe.NormalizedSpeed > 0.01f;
+            var phase = moving
+                ? safe.StridePhase * MathF.Tau + index % 2 * MathF.PI
+                : (float)(safe.AnimationTime * cadence + index * Math.PI / 2);
+            var amplitude = moving
+                ? leg.Width * moodAmplitude * (1.2f + safe.NormalizedSpeed * 1.8f)
+                : leg.Width * moodAmplitude * 1.25f;
+            var lift = MathF.Sin(phase) * amplitude;
+            var sweep = moving ? MathF.Cos(phase) * amplitude * 0.35f : 0;
             legs[index] = leg with
             {
-                Knee = new SKPoint(leg.Knee.X, leg.Knee.Y + lift),
-                Tip = new SKPoint(leg.Tip.X, leg.Tip.Y - lift * 0.35f)
+                Knee = new SKPoint(leg.Knee.X + sweep, leg.Knee.Y + lift * 0.35f),
+                Tip = new SKPoint(leg.Tip.X, leg.Tip.Y + lift)
             };
         }
 
+        var rotation = MathF.Atan2(safe.FacingY, safe.FacingX) + MathF.PI / 2;
+        for (var index = 0; index < legs.Length; index++)
+        {
+            var leg = legs[index];
+            legs[index] = leg with
+            {
+                Root = Rotate(leg.Root, layout.Center, rotation),
+                Knee = Rotate(leg.Knee, layout.Center, rotation),
+                Tip = Rotate(leg.Tip, layout.Center, rotation)
+            };
+        }
+        var abdomen = RotateRectCenter(layout.Abdomen, layout.Center, rotation);
+        var head = RotateRectCenter(layout.Head, layout.Center, rotation);
         return new SpiderPose(
             width,
             height,
             safeDeviceScale,
             layout.Center,
-            layout.Abdomen,
-            layout.Head,
+            abdomen,
+            head,
             legs,
-            CalculateContentBounds(layout.Abdomen, layout.Head, legs));
+            CalculateContentBounds(abdomen, head, legs));
+    }
+
+    private static SKPoint Rotate(SKPoint point, SKPoint center, float angle)
+    {
+        var cosine = MathF.Cos(angle);
+        var sine = MathF.Sin(angle);
+        var x = point.X - center.X;
+        var y = point.Y - center.Y;
+        return new SKPoint(
+            center.X + x * cosine - y * sine,
+            center.Y + x * sine + y * cosine);
+    }
+
+    private static SKRect RotateRectCenter(SKRect rectangle, SKPoint center, float angle)
+    {
+        var rotatedCenter = Rotate(
+            new SKPoint(rectangle.MidX, rectangle.MidY),
+            center,
+            angle);
+        return SKRect.Create(
+            rotatedCenter.X - rectangle.Width / 2,
+            rotatedCenter.Y - rectangle.Height / 2,
+            rectangle.Width,
+            rectangle.Height);
     }
 
     private static SKRect CalculateContentBounds(

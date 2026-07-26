@@ -614,7 +614,16 @@ public partial class OverlayWindow : Window
             return;
         }
 
-        Snapshot = snapshot with { LookX = Snapshot.LookX, LookY = Snapshot.LookY };
+        Snapshot = snapshot with
+        {
+            LookX = Snapshot.LookX,
+            LookY = Snapshot.LookY,
+            FacingX = Snapshot.FacingX,
+            FacingY = Snapshot.FacingY,
+            NormalizedSpeed = Snapshot.NormalizedSpeed,
+            StridePhase = Snapshot.StridePhase,
+            TurnLean = Snapshot.TurnLean
+        };
         _locomotionController.UpdateSnapshot(Snapshot);
         if (IsVisible && WindowState != WindowState.Minimized)
         {
@@ -634,6 +643,16 @@ public partial class OverlayWindow : Window
         try
         {
             _locomotionController.Tick(elapsed);
+            var motion = _locomotionController.CurrentFrame;
+            Snapshot = Snapshot with
+            {
+                FacingX = (float)motion.State.Facing.X,
+                FacingY = (float)motion.State.Facing.Y,
+                NormalizedSpeed = (float)motion.NormalizedSpeed,
+                StridePhase = (float)motion.State.StridePhase,
+                TurnLean = (float)motion.State.TurnLean
+            };
+            SpiderCanvas.InvalidateVisual();
         }
         catch (Exception exception)
         {

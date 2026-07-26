@@ -73,6 +73,48 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
+    public void Normalize_归一化运动方向速度步相与转弯倾斜()
+    {
+        var normalized = Snapshot(PetMode.Normal) with
+        {
+            FacingX = 4,
+            FacingY = 3,
+            NormalizedSpeed = 2,
+            StridePhase = -1,
+            TurnLean = float.NegativeInfinity
+        };
+
+        normalized = normalized.Normalize();
+
+        Assert.Equal(0.8f, normalized.FacingX, 4);
+        Assert.Equal(0.6f, normalized.FacingY, 4);
+        Assert.Equal(1, normalized.NormalizedSpeed);
+        Assert.Equal(0, normalized.StridePhase);
+        Assert.Equal(0, normalized.TurnLean);
+    }
+
+    [Fact]
+    public void CreatePose_移动步相驱动交替八足且朝向会旋转头部()
+    {
+        var baseSnapshot = Snapshot(PetMode.Normal, 1.25);
+        var still = SpiderGeometry.CreatePose(256, 256, baseSnapshot);
+        var moving = SpiderGeometry.CreatePose(256, 256, baseSnapshot with
+        {
+            NormalizedSpeed = 1,
+            StridePhase = 0.25f
+        });
+        var facingRight = SpiderGeometry.CreatePose(256, 256, baseSnapshot with
+        {
+            FacingX = 1,
+            FacingY = 0
+        });
+
+        Assert.NotEqual(still.Legs[0].Tip, moving.Legs[0].Tip);
+        Assert.NotEqual(moving.Legs[0].Tip.Y, moving.Legs[1].Tip.Y);
+        Assert.True(facingRight.Head.MidX > facingRight.Abdomen.MidX);
+    }
+
+    [Fact]
     public void Draw_默认路径与显式共享姿态产生相同像素()
     {
         using var scene = new WhiteJadeSpiderScene();
