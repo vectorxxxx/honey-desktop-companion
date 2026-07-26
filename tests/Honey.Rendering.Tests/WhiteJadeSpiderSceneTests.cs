@@ -115,6 +115,52 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
+    public void CreatePose_步态固定腿根并逐级放大外部骨点位移()
+    {
+        var still = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 0
+        });
+        var moving = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 1,
+            StridePhase = 0.25f
+        });
+
+        var stillLeg = still.Legs[0];
+        var movingLeg = moving.Legs[0];
+        Assert.Equal(stillLeg.Root, movingLeg.Root);
+        Assert.NotEqual(stillLeg.Hip, movingLeg.Hip);
+        Assert.NotEqual(stillLeg.Knee, movingLeg.Knee);
+        Assert.NotEqual(stillLeg.Tip, movingLeg.Tip);
+    }
+
+    [Fact]
+    public void CreatePose_方向旋转保持三段长度与解剖层级()
+    {
+        var up = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal) with
+        {
+            FacingX = 0,
+            FacingY = -1
+        });
+        var right = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal) with
+        {
+            FacingX = 1,
+            FacingY = 0
+        });
+
+        for (var index = 0; index < up.Legs.Count; index++)
+        {
+            var upLeg = up.Legs[index];
+            var rightLeg = right.Legs[index];
+            Assert.Equal(Distance(upLeg.Root, upLeg.Hip), Distance(rightLeg.Root, rightLeg.Hip), 3);
+            Assert.Equal(Distance(upLeg.Hip, upLeg.Knee), Distance(rightLeg.Hip, rightLeg.Knee), 3);
+            Assert.Equal(Distance(upLeg.Knee, upLeg.Tip), Distance(rightLeg.Knee, rightLeg.Tip), 3);
+            Assert.Equal(upLeg.Layer, rightLeg.Layer);
+        }
+    }
+
+    [Fact]
     public void Create_动漫桌宠轮廓采用宽伏腹部紧凑头胸与厚实节肢()
     {
         var layout = SpiderLayout.Create(256, 256, 1);
