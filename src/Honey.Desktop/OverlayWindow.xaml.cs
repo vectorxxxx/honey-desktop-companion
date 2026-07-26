@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Honey.Content.WhiteJadeSpider;
 using Honey.Desktop.Interaction;
+using Honey.Desktop.Movement;
 using Honey.Desktop.Rendering;
 using Honey.Desktop.Runtime;
 using Honey.Desktop.Settings;
@@ -38,8 +39,16 @@ public partial class OverlayWindow : Window
     private readonly PointerInteractionFinalizer _interactionFinalizer;
     private readonly Guid _petId;
     private readonly PetRuntimeController _runtime;
+    private readonly CursorService _cursorService = new();
+    private readonly DesktopLocomotionController _locomotionController;
+    private readonly DispatcherTimer _movementTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(33)
+    };
+    private readonly Stopwatch _movementClock = Stopwatch.StartNew();
     private RenderSnapshot _snapshot;
     private SpiderHitMap _hitMap = SpiderHitMap.CreateDefault(0, 0, 1);
+    private PixelRect _contentBoundsPhysical = new(80, 80, 160, 160);
     private float _canvasCoordinateWidth;
     private float _canvasCoordinateHeight;
     private bool _menuOpen;
@@ -91,6 +100,18 @@ public partial class OverlayWindow : Window
         _interactionFinalizer = new PointerInteractionFinalizer(_interactionController);
 
         InitializeComponent();
+        _locomotionController = new DesktopLocomotionController(
+            GetPhysicalWindowOrigin,
+            () => _contentBoundsPhysical,
+            _displayBounds.GetWorkAreas,
+            _cursorService.GetPosition,
+            MoveWindowPhysical,
+            WhiteJadeSpiderPack.LocomotionProfile);
+        _locomotionController.UpdateSettings(
+            appliedSettings.AutonomousMovementEnabled,
+            appliedSettings.AllowCrossMonitorRoaming);
+        _locomotionController.UpdateSnapshot(_snapshot);
+        _movementTimer.Tick += OnMovementTimerTick;
         _thoughtTimer.Tick += OnThoughtTimerTick;
         SourceInitialized += OnSourceInitialized;
         Closing += OnClosing;
@@ -218,11 +239,15 @@ public partial class OverlayWindow : Window
 
     public void ApplySettings(AppSettings settings)
     {
-        _runtime.ApplySettings(settings);
+        var normalized = settings.Normalize();
+        _runtime.ApplySettings(normalized);
+        _locomotionController.UpdateSettings(
+            normalized.AutonomousMovementEnabled,
+            normalized.AllowCrossMonitorRoaming);
         Snapshot = Snapshot with
         {
-            Scale = settings.Normalize().PetSize / 140f,
-            Mode = PetRuntimePolicy.ApplyModePreference(settings.ModePreference, Snapshot.Mode)
+            Scale = normalized.PetSize / 140f,
+            Mode = PetRuntimePolicy.ApplyModePreference(normalized.ModePreference, Snapshot.Mode)
         };
     }
 
@@ -269,6 +294,11 @@ public partial class OverlayWindow : Window
             current,
             deviceScale);
         _hitMap = SpiderHitMap.Create(pose);
+        _contentBoundsPhysical = new PixelRect(
+            (int)Math.Floor(pose.ContentBounds.Left),
+            (int)Math.Floor(pose.ContentBounds.Top),
+            Math.Max(1, (int)Math.Ceiling(pose.ContentBounds.Width)),
+            Math.Max(1, (int)Math.Ceiling(pose.ContentBounds.Height)));
         _scene.Draw(canvas, current, pose);
     }
 
@@ -278,6 +308,8 @@ public partial class OverlayWindow : Window
         UpdatePauseButtonVisual();
         UpdateVisibilityPause();
         UpdateRenderingSubscription();
+        _locomotionController.ResetToCurrentPosition();
+        UpdateMovementSubscription();
         SpiderCanvas.InvalidateVisual();
     }
 
@@ -291,6 +323,7 @@ public partial class OverlayWindow : Window
         }
 
         UpdateRenderingSubscription();
+        UpdateMovementSubscription();
     }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
@@ -302,6 +335,7 @@ public partial class OverlayWindow : Window
         }
 
         UpdateRenderingSubscription();
+        UpdateMovementSubscription();
     }
 
     private void UpdateVisibilityPause() =>
@@ -321,12 +355,28 @@ public partial class OverlayWindow : Window
         }
     }
 
+    private void UpdateMovementSubscription()
+    {
+        if (IsVisible && WindowState != WindowState.Minimized)
+        {
+            _movementClock.Restart();
+            _movementTimer.Start();
+        }
+        else
+        {
+            _movementTimer.Stop();
+            _movementClock.Restart();
+        }
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
         FinalizePointerInteraction(null, complete: false);
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
             StopThoughtBubble();
+            _movementTimer.Stop();
+            _movementTimer.Tick -= OnMovementTimerTick;
             _thoughtTimer.Tick -= OnThoughtTimerTick;
             _runtime.SnapshotChanged -= OnRuntimeSnapshotChanged;
             _runtime.Dispose();
@@ -483,6 +533,7 @@ public partial class OverlayWindow : Window
             if (wasDragging)
             {
                 RestoreToVisibleWorkArea();
+                _locomotionController.ResetToCurrentPosition();
             }
         }
     }
@@ -560,9 +611,29 @@ public partial class OverlayWindow : Window
         }
 
         Snapshot = snapshot with { LookX = Snapshot.LookX, LookY = Snapshot.LookY };
+        _locomotionController.UpdateSnapshot(Snapshot);
         if (IsVisible && WindowState != WindowState.Minimized)
         {
             SpiderCanvas.InvalidateVisual();
+        }
+    }
+
+    private void OnMovementTimerTick(object? sender, EventArgs e)
+    {
+        var elapsed = _movementClock.Elapsed;
+        _movementClock.Restart();
+        _locomotionController.SetPaused(
+            _pauseCoordinator.EffectivePaused
+            || _menuOpen
+            || !IsVisible
+            || WindowState == WindowState.Minimized);
+        try
+        {
+            _locomotionController.Tick(elapsed);
+        }
+        catch (Exception exception)
+        {
+            Trace.TraceError("桌宠自主移动失败：{0}", exception);
         }
     }
 
@@ -602,8 +673,8 @@ public partial class OverlayWindow : Window
         return handle != IntPtr.Zero && GetWindowRect(handle, out var rectangle)
             ? new PixelPoint(rectangle.Left, rectangle.Top)
             : new PixelPoint(
-                (int)Math.Round(Left * GetDpi().DpiScaleX),
-                (int)Math.Round(Top * GetDpi().DpiScaleY));
+                (int)Math.Round((double.IsFinite(Left) ? Left : 0) * GetDpi().DpiScaleX),
+                (int)Math.Round((double.IsFinite(Top) ? Top : 0) * GetDpi().DpiScaleY));
     }
 
     private (int Width, int Height) GetPhysicalWindowSize()
