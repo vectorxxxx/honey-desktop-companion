@@ -8,6 +8,40 @@ namespace Honey.Rendering.Tests;
 public sealed class WhiteJadeSpiderSceneTests
 {
     [Fact]
+    public void Scene_玉足由独立渲染器接管且移除旧直线画笔()
+    {
+        var source = ReadSceneSource();
+
+        Assert.Contains("SpiderLimbRenderer", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DrawLegSegment(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_legJadePaint", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_legHighlightPaint", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Draw_前景腿根被身体遮挡而外段覆盖身体()
+    {
+        var bodyColor = new SKColor(13, 233, 71, 255);
+        using var atlas = new SolidBodyAtlas(bodyColor);
+        using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
+        var snapshot = Snapshot(PetMode.Normal) with
+        {
+            FacingX = 0,
+            FacingY = -1
+        };
+        var pose = SpiderGeometry.CreatePose(256, 256, snapshot);
+        var frontLeg = pose.Legs.First(
+            leg => leg.Layer == SpiderLegLayer.AboveBody
+                && leg.Root.X < pose.Center.X
+                && leg.Root.Y < pose.Center.Y);
+
+        using var bitmap = Render(scene, snapshot);
+
+        Assert.Equal(bodyColor, PixelAtMidpoint(bitmap, frontLeg.Root, frontLeg.Hip));
+        Assert.NotEqual(bodyColor, PixelAtMidpoint(bitmap, frontLeg.Hip, frontLeg.Knee));
+    }
+
+    [Fact]
     public void Draw_普通与狂暴有明显像素差异且四角透明()
     {
         using var scene = new WhiteJadeSpiderScene();
@@ -402,11 +436,68 @@ public sealed class WhiteJadeSpiderSceneTests
         return count;
     }
 
+    private static SKColor PixelAtMidpoint(SKBitmap bitmap, SKPoint start, SKPoint end) =>
+        bitmap.GetPixel(
+            (int)MathF.Round((start.X + end.X) / 2),
+            (int)MathF.Round((start.Y + end.Y) / 2));
+
+    private static string ReadSceneSource()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var path = Path.Combine(
+                directory.FullName,
+                "src",
+                "Honey.Rendering",
+                "Spider",
+                "WhiteJadeSpiderScene.cs");
+            if (File.Exists(path))
+            {
+                return File.ReadAllText(path);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException("无法定位 WhiteJadeSpiderScene.cs。");
+    }
+
     private static void SavePreview(SKBitmap bitmap, string fileName)
     {
         var directory = Path.Combine(Path.GetTempPath(), "honey-task7-stage-preview");
         Directory.CreateDirectory(directory);
         using var stream = File.Create(Path.Combine(directory, fileName));
         bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);
+    }
+
+    private sealed class SolidBodyAtlas(SKColor color) : ISpiderBodyAtlas
+    {
+        private readonly SKBitmap _bitmap = CreateBitmap(color);
+
+        public bool TryGetFrame(
+            PetMode mode,
+            SpiderDirection direction,
+            out SpiderAtlasFrame frame)
+        {
+            frame = new SpiderAtlasFrame(
+                _bitmap,
+                new SKRectI(0, 0, _bitmap.Width, _bitmap.Height),
+                new SKPoint(0.5f, 0.5f));
+            return true;
+        }
+
+        public void Dispose() => _bitmap.Dispose();
+
+        private static SKBitmap CreateBitmap(SKColor color)
+        {
+            var bitmap = new SKBitmap(
+                8,
+                8,
+                SKColorType.Bgra8888,
+                SKAlphaType.Premul);
+            bitmap.Erase(color);
+            return bitmap;
+        }
     }
 }
