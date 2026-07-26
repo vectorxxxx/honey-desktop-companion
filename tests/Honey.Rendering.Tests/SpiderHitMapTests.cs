@@ -109,24 +109,201 @@ public sealed class SpiderHitMapTests
     [InlineData(PetMood.Sleepy, 1.75)]
     [InlineData(PetMood.Alert, 2.25)]
     [InlineData(PetMood.Angry, 2.75)]
-    public void CreateForSnapshot_每条动态腿的两段中点与膝点均可命中(
+    public void CreateForSnapshot_每条动态腿的三段中点与关节均可命中(
         PetMood mood,
         double animationTime)
     {
-        var snapshot = Snapshot(mood, animationTime);
-        var pose = SpiderGeometry.CreatePose(260, 260, snapshot);
-        var hitMap = SpiderHitMap.CreateForSnapshot(260, 260, snapshot);
+        var snapshot = Snapshot(mood, animationTime) with { Scale = 2 };
+        var pose = SpiderGeometry.CreatePose(520, 520, snapshot);
+        var hitMap = SpiderHitMap.CreateForSnapshot(520, 520, snapshot);
 
-        foreach (var leg in pose.Legs)
+        for (var index = 0; index < pose.Legs.Count; index++)
         {
-            Assert.True(hitMap.Contains(leg.Knee.X, leg.Knee.Y));
-            Assert.True(hitMap.Contains(
-                (leg.Root.X + leg.Knee.X) / 2,
-                (leg.Root.Y + leg.Knee.Y) / 2));
-            Assert.True(hitMap.Contains(
-                (leg.Knee.X + leg.Tip.X) / 2,
-                (leg.Knee.Y + leg.Tip.Y) / 2));
+            var leg = pose.Legs[index];
+
+            Assert.True(
+                hitMap.Contains(leg.Hip.X, leg.Hip.Y),
+                $"第 {index} 条腿的髋关节应可命中。");
+            Assert.True(
+                hitMap.Contains(leg.Knee.X, leg.Knee.Y),
+                $"第 {index} 条腿的膝关节应可命中。");
+            Assert.True(
+                hitMap.Contains(
+                    (leg.Root.X + leg.Hip.X) / 2,
+                    (leg.Root.Y + leg.Hip.Y) / 2),
+                $"第 {index} 条腿的根部至髋关节中点应可命中。");
+            Assert.True(
+                hitMap.Contains(
+                    (leg.Hip.X + leg.Knee.X) / 2,
+                    (leg.Hip.Y + leg.Knee.Y) / 2),
+                $"第 {index} 条腿的髋关节至膝关节中点应可命中。");
+            Assert.True(
+                hitMap.Contains(
+                    (leg.Knee.X + leg.Tip.X) / 2,
+                    (leg.Knee.Y + leg.Tip.Y) / 2),
+                $"第 {index} 条腿的膝关节至足尖中点应可命中。");
         }
+    }
+
+    [Fact]
+    public void Create_明显弯折的腿仍命中根部至髋关节中点()
+    {
+        var abdomen = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 240),
+            12,
+            10,
+            0);
+        var head = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 220),
+            8,
+            6,
+            0);
+        var leg = new SpiderLeg(
+            new SkiaSharp.SKPoint(20, 100),
+            new SkiaSharp.SKPoint(20, 20),
+            new SkiaSharp.SKPoint(100, 100),
+            new SkiaSharp.SKPoint(180, 100),
+            4,
+            SpiderLegLayer.BehindBody);
+        var pose = new SpiderPose(
+            260,
+            260,
+            1,
+            new SkiaSharp.SKPoint(240, 240),
+            abdomen,
+            head,
+            [leg],
+            new SkiaSharp.SKRect(18, 18, 252, 252));
+        var hitMap = SpiderHitMap.Create(pose);
+
+        Assert.True(hitMap.Contains(20, 60));
+    }
+
+    [Fact]
+    public void Create_非法腿宽不会让远处透明区域误命中()
+    {
+        var abdomen = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 240),
+            12,
+            10,
+            0);
+        var head = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 220),
+            8,
+            6,
+            0);
+        var leg = new SpiderLeg(
+            new SkiaSharp.SKPoint(20, 20),
+            new SkiaSharp.SKPoint(30, 20),
+            new SkiaSharp.SKPoint(40, 20),
+            new SkiaSharp.SKPoint(50, 20),
+            float.PositiveInfinity,
+            SpiderLegLayer.BehindBody);
+        var pose = new SpiderPose(
+            260,
+            260,
+            1,
+            new SkiaSharp.SKPoint(240, 240),
+            abdomen,
+            head,
+            [leg],
+            new SkiaSharp.SKRect(18, 18, 252, 252));
+
+        Assert.False(SpiderHitMap.Create(pose).Contains(180, 180));
+    }
+
+    [Fact]
+    public void Create_零长度骨段仅按关节点距离命中()
+    {
+        var joint = new SkiaSharp.SKPoint(20, 20);
+        var leg = new SpiderLeg(
+            joint,
+            joint,
+            joint,
+            joint,
+            4,
+            SpiderLegLayer.BehindBody);
+        var hitMap = SpiderHitMap.Create(PoseWithSingleLeg(leg));
+
+        Assert.True(hitMap.Contains(25, 20));
+        Assert.False(hitMap.Contains(100, 100));
+    }
+
+    [Theory]
+    [InlineData(0, false, 0)]
+    [InlineData(0, false, 1)]
+    [InlineData(0, false, 2)]
+    [InlineData(0, true, 0)]
+    [InlineData(0, true, 1)]
+    [InlineData(0, true, 2)]
+    [InlineData(1, false, 0)]
+    [InlineData(1, false, 1)]
+    [InlineData(1, false, 2)]
+    [InlineData(1, true, 0)]
+    [InlineData(1, true, 1)]
+    [InlineData(1, true, 2)]
+    [InlineData(2, false, 0)]
+    [InlineData(2, false, 1)]
+    [InlineData(2, false, 2)]
+    [InlineData(2, true, 0)]
+    [InlineData(2, true, 1)]
+    [InlineData(2, true, 2)]
+    [InlineData(3, false, 0)]
+    [InlineData(3, false, 1)]
+    [InlineData(3, false, 2)]
+    [InlineData(3, true, 0)]
+    [InlineData(3, true, 1)]
+    [InlineData(3, true, 2)]
+    public void Create_非有限端点不污染命中且保留有效相邻骨段(
+        int pointIndex,
+        bool invalidY,
+        int invalidKind)
+    {
+        var invalid = invalidKind switch
+        {
+            0 => float.NaN,
+            1 => float.PositiveInfinity,
+            _ => float.NegativeInfinity
+        };
+        var points = new[]
+        {
+            new SkiaSharp.SKPoint(20, 20),
+            new SkiaSharp.SKPoint(40, 20),
+            new SkiaSharp.SKPoint(60, 30),
+            new SkiaSharp.SKPoint(80, 30)
+        };
+        points[pointIndex] = invalidY
+            ? new SkiaSharp.SKPoint(points[pointIndex].X, invalid)
+            : new SkiaSharp.SKPoint(invalid, points[pointIndex].Y);
+        var leg = new SpiderLeg(
+            points[0],
+            points[1],
+            points[2],
+            points[3],
+            4,
+            SpiderLegLayer.BehindBody);
+        var hitMap = SpiderHitMap.Create(PoseWithSingleLeg(leg));
+
+        Assert.False(hitMap.Contains(180, 180));
+        Assert.False(hitMap.Contains(70, 160));
+        var validMidpoint = pointIndex <= 1
+            ? new SkiaSharp.SKPoint(70, 30)
+            : new SkiaSharp.SKPoint(30, 20);
+        Assert.True(hitMap.Contains(validMidpoint.X, validMidpoint.Y));
+    }
+
+    [Fact]
+    public void Create_超大有限骨段中点仍可命中()
+    {
+        var leg = new SpiderLeg(
+            new SkiaSharp.SKPoint(-1e20f, 0),
+            new SkiaSharp.SKPoint(1e20f, 0),
+            new SkiaSharp.SKPoint(1e20f, 20),
+            new SkiaSharp.SKPoint(1e20f, 40),
+            4,
+            SpiderLegLayer.BehindBody);
+
+        Assert.True(SpiderHitMap.Create(PoseWithSingleLeg(leg)).Contains(0, 0));
     }
 
     [Fact]
@@ -161,4 +338,27 @@ public sealed class SpiderHitMapTests
 
     private static RenderSnapshot Snapshot(PetMood mood, double time) =>
         new(PetMode.Normal, mood, 0, 0, time, 1, "observe");
+
+    private static SpiderPose PoseWithSingleLeg(SpiderLeg leg)
+    {
+        var abdomen = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 240),
+            12,
+            10,
+            0);
+        var head = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 220),
+            8,
+            6,
+            0);
+        return new SpiderPose(
+            260,
+            260,
+            1,
+            new SkiaSharp.SKPoint(240, 240),
+            abdomen,
+            head,
+            [leg],
+            new SkiaSharp.SKRect(18, 18, 252, 252));
+    }
 }

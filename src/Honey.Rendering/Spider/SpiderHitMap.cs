@@ -72,14 +72,46 @@ public sealed class SpiderHitMap
             return true;
         }
 
-        return _pose.Legs.Any(leg =>
-            DistanceToSegment(x, y, leg.Root.X, leg.Root.Y, leg.Knee.X, leg.Knee.Y)
-                <= Math.Max(leg.Width / 2, _grabPadding)
-            || DistanceToSegment(x, y, leg.Knee.X, leg.Knee.Y, leg.Tip.X, leg.Tip.Y)
-                <= Math.Max(leg.Width / 2, _grabPadding));
+        foreach (var leg in _pose.Legs)
+        {
+            if (ContainsSegment(point, leg.Root, leg.Hip, leg.Width)
+                || ContainsSegment(point, leg.Hip, leg.Knee, leg.Width * 0.76f)
+                || ContainsSegment(point, leg.Knee, leg.Tip, leg.Width * 0.52f))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    private static float DistanceToSegment(
+    private bool ContainsSegment(
+        SkiaSharp.SKPoint point,
+        SkiaSharp.SKPoint start,
+        SkiaSharp.SKPoint end,
+        float width)
+    {
+        if (!float.IsFinite(start.X)
+            || !float.IsFinite(start.Y)
+            || !float.IsFinite(end.X)
+            || !float.IsFinite(end.Y)
+            || !float.IsFinite(width)
+            || width <= 0)
+        {
+            return false;
+        }
+
+        return DistanceToSegment(
+                point.X,
+                point.Y,
+                start.X,
+                start.Y,
+                end.X,
+                end.Y)
+            <= Math.Max(width / 2, _grabPadding);
+    }
+
+    private static double DistanceToSegment(
         float x,
         float y,
         float startX,
@@ -87,17 +119,24 @@ public sealed class SpiderHitMap
         float endX,
         float endY)
     {
-        var deltaX = endX - startX;
-        var deltaY = endY - startY;
+        var deltaX = (double)endX - startX;
+        var deltaY = (double)endY - startY;
         var lengthSquared = deltaX * deltaX + deltaY * deltaY;
-        if (lengthSquared <= float.Epsilon)
+        if (lengthSquared <= double.Epsilon)
         {
-            return MathF.Sqrt((x - startX) * (x - startX) + (y - startY) * (y - startY));
+            var pointDeltaX = (double)x - startX;
+            var pointDeltaY = (double)y - startY;
+            return Math.Sqrt(pointDeltaX * pointDeltaX + pointDeltaY * pointDeltaY);
         }
 
-        var t = Math.Clamp(((x - startX) * deltaX + (y - startY) * deltaY) / lengthSquared, 0, 1);
+        var t = Math.Clamp(
+            (((double)x - startX) * deltaX + ((double)y - startY) * deltaY) / lengthSquared,
+            0,
+            1);
         var closestX = startX + t * deltaX;
         var closestY = startY + t * deltaY;
-        return MathF.Sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+        var distanceX = x - closestX;
+        var distanceY = y - closestY;
+        return Math.Sqrt(distanceX * distanceX + distanceY * distanceY);
     }
 }

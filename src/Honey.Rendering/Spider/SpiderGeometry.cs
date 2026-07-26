@@ -38,18 +38,25 @@ public static class SpiderGeometry
         {
             var leg = layout.Legs[index];
             var moving = safe.NormalizedSpeed > 0.01f;
+            var gaitParity = ((index % 4) + (index / 4)) % 2;
             var phase = moving
-                ? safe.StridePhase * MathF.Tau + index % 2 * MathF.PI
+                ? safe.StridePhase * MathF.Tau + gaitParity * MathF.PI
                 : (float)(safe.AnimationTime * cadence + index * Math.PI / 2);
             var amplitude = moving
                 ? leg.Width * moodAmplitude * (1.2f + safe.NormalizedSpeed * 1.8f)
                 : leg.Width * moodAmplitude * 1.25f;
             var lift = MathF.Sin(phase) * amplitude;
             var sweep = moving ? MathF.Cos(phase) * amplitude * 0.35f : 0;
+            var hipLift = lift * 0.16f;
+            var kneeLift = lift * 0.52f;
+            var tipLift = lift;
+            var hipSweep = sweep * 0.22f;
+            var kneeSweep = sweep * 0.66f;
             legs[index] = leg with
             {
-                Knee = new SKPoint(leg.Knee.X + sweep, leg.Knee.Y + lift * 0.35f),
-                Tip = new SKPoint(leg.Tip.X, leg.Tip.Y + lift)
+                Hip = new SKPoint(leg.Hip.X + hipSweep, leg.Hip.Y + hipLift),
+                Knee = new SKPoint(leg.Knee.X + kneeSweep, leg.Knee.Y + kneeLift),
+                Tip = new SKPoint(leg.Tip.X + sweep, leg.Tip.Y + tipLift)
             };
         }
 
@@ -60,6 +67,7 @@ public static class SpiderGeometry
             legs[index] = leg with
             {
                 Root = Rotate(leg.Root, layout.Center, rotation),
+                Hip = Rotate(leg.Hip, layout.Center, rotation),
                 Knee = Rotate(leg.Knee, layout.Center, rotation),
                 Tip = Rotate(leg.Tip, layout.Center, rotation)
             };
@@ -117,6 +125,7 @@ public static class SpiderGeometry
         {
             var radius = leg.Width * 1.18f / 2;
             Include(leg.Root, radius, ref left, ref top, ref right, ref bottom);
+            Include(leg.Hip, radius, ref left, ref top, ref right, ref bottom);
             Include(leg.Knee, radius, ref left, ref top, ref right, ref bottom);
             Include(leg.Tip, radius, ref left, ref top, ref right, ref bottom);
         }

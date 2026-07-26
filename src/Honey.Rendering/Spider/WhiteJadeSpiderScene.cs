@@ -11,22 +11,16 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
     private readonly ISpiderBodyAtlas? _atlas;
     private readonly bool _ownsAtlas;
     private readonly SpiderDirectionSelector _directionSelector = new();
+    private readonly SpiderLimbRenderer _limbRenderer = new();
     private readonly SKPaint _particlePaint = new() { IsAntialias = true };
-    private readonly SKPaint _legShadowPaint = new()
+    private readonly SKPaint _mouthShadowPaint = new()
     {
         IsAntialias = true,
         Style = SKPaintStyle.Stroke,
         StrokeCap = SKStrokeCap.Round,
         StrokeJoin = SKStrokeJoin.Round
     };
-    private readonly SKPaint _legJadePaint = new()
-    {
-        IsAntialias = true,
-        Style = SKPaintStyle.Stroke,
-        StrokeCap = SKStrokeCap.Round,
-        StrokeJoin = SKStrokeJoin.Round
-    };
-    private readonly SKPaint _legHighlightPaint = new()
+    private readonly SKPaint _mouthJadePaint = new()
     {
         IsAntialias = true,
         Style = SKPaintStyle.Stroke,
@@ -156,7 +150,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             DrawParticles(canvas, pose, safe, detailLevel);
         }
         _webScene.Draw(canvas, new SKRect(0, 0, bounds.Width, bounds.Height), safe);
-        DrawLegs(canvas, pose, safe, detailLevel, drawFront: false);
+        DrawLegRootsAndBackLegs(canvas, pose, safe, detailLevel);
         var direction = SpiderArtworkDirectionMap.Map(
             _directionSelector.Select(safe.FacingX, safe.FacingY));
         var atlasDrawn = false;
@@ -171,7 +165,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             DrawProceduralBody(canvas, pose, safe);
         }
 
-        DrawLegs(canvas, pose, safe, detailLevel, drawFront: true);
+        DrawFrontOuterLegs(canvas, pose, safe, detailLevel);
         if (!atlasDrawn)
         {
             DrawMouthparts(canvas, pose, safe);
@@ -378,86 +372,40 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         }
     }
 
-    private void DrawLegs(
+    private void DrawLegRootsAndBackLegs(
         SKCanvas canvas,
         SpiderPose pose,
         RenderSnapshot snapshot,
-        SpiderDetailLevel detailLevel,
-        bool drawFront)
-    {
-        var palette = SpiderMaterialPalette.For(snapshot.Mode);
-        _legShadowPaint.Color = palette.LegShadow;
-        _legJadePaint.Color = palette.LegSurface;
-        _legHighlightPaint.Color = palette.BodyHighlight.WithAlpha(190);
-        var forward = UnitForward(snapshot);
-
-        foreach (var leg in pose.Legs)
-        {
-            var rootDelta = leg.Root - pose.Center;
-            var isFront = rootDelta.X * forward.X + rootDelta.Y * forward.Y > 0;
-            if (isFront != drawFront)
-            {
-                continue;
-            }
-
-            DrawLegSegment(
-                canvas,
-                leg.Root,
-                leg.Knee,
-                leg.Width * 1.16f,
-                detailLevel);
-            DrawLegSegment(
-                canvas,
-                leg.Knee,
-                leg.Tip,
-                leg.Width * 0.82f,
-                detailLevel);
-            if (detailLevel >= SpiderDetailLevel.Standard)
-            {
-                DrawJointCap(canvas, leg.Knee, leg.Width, palette);
-            }
-        }
-    }
-
-    private void DrawLegSegment(
-        SKCanvas canvas,
-        SKPoint start,
-        SKPoint end,
-        float width,
         SpiderDetailLevel detailLevel)
     {
-        _legShadowPaint.StrokeWidth = width * 1.28f;
-        _legJadePaint.StrokeWidth = width * 0.76f;
-        _legHighlightPaint.StrokeWidth = Math.Max(0.8f, width * 0.17f);
-        canvas.DrawLine(start, end, _legShadowPaint);
-        canvas.DrawLine(start, end, _legJadePaint);
-        if (detailLevel >= SpiderDetailLevel.Standard)
+        var palette = SpiderMaterialPalette.For(snapshot.Mode);
+        foreach (var leg in pose.Legs)
         {
-            canvas.DrawLine(start, end, _legHighlightPaint);
+            if (leg.Layer == SpiderLegLayer.BehindBody)
+            {
+                _limbRenderer.DrawCompleteLeg(canvas, leg, palette, detailLevel);
+            }
+            else
+            {
+                _limbRenderer.DrawRootSegment(canvas, leg, palette, detailLevel);
+            }
         }
     }
 
-    private void DrawJointCap(
+    private void DrawFrontOuterLegs(
         SKCanvas canvas,
-        SKPoint center,
-        float width,
-        SpiderMaterialPalette palette)
+        SpiderPose pose,
+        RenderSnapshot snapshot,
+        SpiderDetailLevel detailLevel)
     {
-        using var shader = SKShader.CreateRadialGradient(
-            new SKPoint(center.X - width * 0.14f, center.Y - width * 0.18f),
-            width * 0.58f,
-            [palette.BodyHighlight, palette.LegSurface, palette.LegShadow],
-            [0, 0.55f, 1],
-            SKShaderTileMode.Clamp);
-        _bodyPaint.Shader = shader;
-        canvas.DrawOval(
-            SKRect.Create(
-                center.X - width * 0.48f,
-                center.Y - width * 0.40f,
-                width * 0.96f,
-                width * 0.80f),
-            _bodyPaint);
-        _bodyPaint.Shader = null;
+        var palette = SpiderMaterialPalette.For(snapshot.Mode);
+        foreach (var leg in pose.Legs)
+        {
+            if (leg.Layer == SpiderLegLayer.AboveBody)
+            {
+                _limbRenderer.DrawOuterSegments(canvas, leg, palette, detailLevel);
+            }
+        }
     }
 
     private void DrawAtlasBody(
@@ -593,10 +541,10 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         var side = new SKPoint(-forward.Y, forward.X);
         var rootDistance = pose.Head.Width * 0.24f;
         var fangLength = pose.Head.Width * 0.23f;
-        _legShadowPaint.Color = palette.LegShadow;
-        _legShadowPaint.StrokeWidth = Math.Max(2.2f * pose.DeviceScale, pose.Head.Width * 0.075f);
-        _legJadePaint.Color = palette.LegSurface;
-        _legJadePaint.StrokeWidth = _legShadowPaint.StrokeWidth * 0.48f;
+        _mouthShadowPaint.Color = palette.LegShadow;
+        _mouthShadowPaint.StrokeWidth = Math.Max(2.2f * pose.DeviceScale, pose.Head.Width * 0.075f);
+        _mouthJadePaint.Color = palette.LegSurface;
+        _mouthJadePaint.StrokeWidth = _mouthShadowPaint.StrokeWidth * 0.48f;
         for (var direction = -1; direction <= 1; direction += 2)
         {
             var root = new SKPoint(
@@ -605,8 +553,8 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             var tip = new SKPoint(
                 root.X + forward.X * fangLength - side.X * direction * pose.Head.Width * 0.06f,
                 root.Y + forward.Y * fangLength - side.Y * direction * pose.Head.Width * 0.06f);
-            canvas.DrawLine(root, tip, _legShadowPaint);
-            canvas.DrawLine(root, tip, _legJadePaint);
+            canvas.DrawLine(root, tip, _mouthShadowPaint);
+            canvas.DrawLine(root, tip, _mouthJadePaint);
         }
     }
 
@@ -751,10 +699,10 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         }
 
         _webScene.Dispose();
+        _limbRenderer.Dispose();
         _particlePaint.Dispose();
-        _legShadowPaint.Dispose();
-        _legJadePaint.Dispose();
-        _legHighlightPaint.Dispose();
+        _mouthShadowPaint.Dispose();
+        _mouthJadePaint.Dispose();
         _veinPaint.Dispose();
         _facetPaint.Dispose();
         _bodyPaint.Dispose();

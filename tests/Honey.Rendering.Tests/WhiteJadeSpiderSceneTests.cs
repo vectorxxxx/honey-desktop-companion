@@ -8,6 +8,40 @@ namespace Honey.Rendering.Tests;
 public sealed class WhiteJadeSpiderSceneTests
 {
     [Fact]
+    public void Scene_玉足由独立渲染器接管且移除旧直线画笔()
+    {
+        var source = ReadSceneSource();
+
+        Assert.Contains("SpiderLimbRenderer", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DrawLegSegment(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_legJadePaint", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_legHighlightPaint", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Draw_前景腿根被身体遮挡而外段覆盖身体()
+    {
+        var bodyColor = new SKColor(13, 233, 71, 255);
+        using var atlas = new SolidBodyAtlas(bodyColor);
+        using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
+        var snapshot = Snapshot(PetMode.Normal) with
+        {
+            FacingX = 0,
+            FacingY = -1
+        };
+        var pose = SpiderGeometry.CreatePose(256, 256, snapshot);
+        var frontLeg = pose.Legs.First(
+            leg => leg.Layer == SpiderLegLayer.AboveBody
+                && leg.Root.X < pose.Center.X
+                && leg.Root.Y < pose.Center.Y);
+
+        using var bitmap = Render(scene, snapshot);
+
+        Assert.Equal(bodyColor, PixelAtMidpoint(bitmap, frontLeg.Root, frontLeg.Hip));
+        Assert.NotEqual(bodyColor, PixelAtMidpoint(bitmap, frontLeg.Hip, frontLeg.Knee));
+    }
+
+    [Fact]
     public void Draw_普通与狂暴有明显像素差异且四角透明()
     {
         using var scene = new WhiteJadeSpiderScene();
@@ -21,6 +55,143 @@ public sealed class WhiteJadeSpiderSceneTests
         Assert.True(CountDifferentPixels(normal, berserk) > 2_000);
         SavePreview(normal, "normal-preview.png");
         SavePreview(berserk, "berserk-preview.png");
+    }
+
+    [Theory]
+    [InlineData(60, 300, 5_000)]
+    [InlineData(140, 1_500, 20_000)]
+    [InlineData(240, 4_000, 65_000)]
+    public void Draw_三档尺寸保持透明边角且完整绘制可见外足(
+        int petPixels,
+        int minimumOpaquePixels,
+        int maximumOpaquePixels)
+    {
+        var bodyColor = new SKColor(18, 236, 72, 255);
+        var snapshot = Snapshot(PetMode.Normal) with
+        {
+            Scale = petPixels / SpiderDetailLevelSelector.ReferencePetPixels
+        };
+        var viewport = SpiderViewportMetrics.ForScale(snapshot.Scale);
+        var viewportWidth = (int)MathF.Ceiling(viewport.Width);
+        var viewportHeight = (int)MathF.Ceiling(viewport.Height);
+        var pose = SpiderGeometry.CreatePose(
+            viewportWidth,
+            viewportHeight,
+            snapshot);
+        using var atlas = new ContrastingBodyAtlas(bodyColor);
+        using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
+        using var bitmap = Render(
+            scene,
+            snapshot,
+            viewportWidth,
+            viewportHeight);
+
+        Assert.Equal((byte)0, bitmap.GetPixel(0, 0).Alpha);
+        Assert.Equal((byte)0, bitmap.GetPixel(viewportWidth - 1, 0).Alpha);
+        Assert.Equal((byte)0, bitmap.GetPixel(0, viewportHeight - 1).Alpha);
+        Assert.Equal(
+            (byte)0,
+            bitmap.GetPixel(viewportWidth - 1, viewportHeight - 1).Alpha);
+        Assert.InRange(
+            CountOpaque(bitmap),
+            minimumOpaquePixels,
+            maximumOpaquePixels);
+
+        Assert.True(
+            pose.ContentBounds.Left >= 0
+                && pose.ContentBounds.Top >= 0
+                && pose.ContentBounds.Right <= viewportWidth
+                && pose.ContentBounds.Bottom <= viewportHeight,
+            $"{petPixels}px 的完整姿态超出 {viewportWidth}×{viewportHeight} 视口：{pose.ContentBounds}。");
+
+        var verifiedSegments = 0;
+        for (var legIndex = 0; legIndex < pose.Legs.Count; legIndex++)
+        {
+            var leg = pose.Legs[legIndex];
+            AssertOuterLegSegment(
+                bitmap,
+                leg.Hip,
+                leg.Knee,
+                leg.Width * 0.76f,
+                leg.Width * 0.52f,
+                bodyColor,
+                $"{petPixels}px 第{legIndex + 1}条腿的髋膝段");
+            verifiedSegments++;
+            AssertOuterLegSegment(
+                bitmap,
+                leg.Knee,
+                leg.Tip,
+                leg.Width * 0.52f,
+                leg.Width * 0.20f,
+                bodyColor,
+                $"{petPixels}px 第{legIndex + 1}条腿的膝足段");
+            verifiedSegments++;
+        }
+
+        Assert.Equal(16, verifiedSegments);
+    }
+
+    [Fact]
+    public void Draw_三档尺寸在十六量化方向均保留完整透明边带()
+    {
+        var bodyColor = new SKColor(18, 236, 72, 255);
+        using var atlas = new ContrastingBodyAtlas(bodyColor);
+        using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
+
+        foreach (var petPixels in new[] { 60, 140, 240 })
+        {
+            var scale =
+                petPixels / SpiderDetailLevelSelector.ReferencePetPixels;
+            var viewport = SpiderViewportMetrics.ForScale(scale);
+            var viewportWidth = (int)MathF.Ceiling(viewport.Width);
+            var viewportHeight = (int)MathF.Ceiling(viewport.Height);
+            var directionSelector = new SpiderDirectionSelector(
+                hysteresisDegrees: 0);
+            for (var directionIndex = 0;
+                directionIndex < SpiderDirection.Count;
+                directionIndex++)
+            {
+                var angle =
+                    directionIndex * MathF.Tau / SpiderDirection.Count;
+                var snapshot = Snapshot(PetMode.Normal) with
+                {
+                    Scale = scale,
+                    FacingX = MathF.Sin(angle),
+                    FacingY = -MathF.Cos(angle)
+                };
+                Assert.Equal(
+                    directionIndex,
+                    directionSelector.Select(
+                        snapshot.FacingX,
+                        snapshot.FacingY).Index);
+                var pose = SpiderGeometry.CreatePose(
+                    viewportWidth,
+                    viewportHeight,
+                    snapshot);
+                using var bitmap = Render(
+                    scene,
+                    snapshot,
+                    viewportWidth,
+                    viewportHeight);
+                var context =
+                    $"{petPixels}px 量化方向{directionIndex}";
+
+                AssertTransparentBorder(bitmap, 2, context);
+                AssertPoseInsideSafeViewport(
+                    pose,
+                    viewportWidth,
+                    viewportHeight,
+                    2,
+                    context);
+                Assert.Equal(
+                    16,
+                    CountOuterSegmentsInsideViewport(
+                        pose,
+                        viewportWidth,
+                        viewportHeight,
+                        2));
+            }
+        }
     }
 
     [Fact]
@@ -115,6 +286,75 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
+    public void CreatePose_步态固定腿根并逐级放大外部骨点位移()
+    {
+        var still = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 0
+        });
+        var moving = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 1,
+            StridePhase = 0.25f
+        });
+
+        var stillLeg = still.Legs[0];
+        var movingLeg = moving.Legs[0];
+        Assert.Equal(stillLeg.Root, movingLeg.Root);
+        var hipDisplacement = Distance(stillLeg.Hip, movingLeg.Hip);
+        var kneeDisplacement = Distance(stillLeg.Knee, movingLeg.Knee);
+        var tipDisplacement = Distance(stillLeg.Tip, movingLeg.Tip);
+        Assert.True(0 < hipDisplacement);
+        Assert.True(hipDisplacement < kneeDisplacement);
+        Assert.True(kneeDisplacement < tipDisplacement);
+    }
+
+    [Fact]
+    public void CreatePose_移动步态让左右同编号与同侧相邻腿反相()
+    {
+        var still = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 0
+        });
+        var moving = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 1,
+            StridePhase = 0.25f
+        });
+
+        var firstTipDisplacement = moving.Legs[0].Tip.Y - still.Legs[0].Tip.Y;
+        var oppositeSideTipDisplacement = moving.Legs[4].Tip.Y - still.Legs[4].Tip.Y;
+        var adjacentTipDisplacement = moving.Legs[1].Tip.Y - still.Legs[1].Tip.Y;
+        Assert.True(firstTipDisplacement * oppositeSideTipDisplacement < 0);
+        Assert.True(firstTipDisplacement * adjacentTipDisplacement < 0);
+    }
+
+    [Fact]
+    public void CreatePose_方向旋转保持三段长度与解剖层级()
+    {
+        var up = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal) with
+        {
+            FacingX = 0,
+            FacingY = -1
+        });
+        var right = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal) with
+        {
+            FacingX = 1,
+            FacingY = 0
+        });
+
+        for (var index = 0; index < up.Legs.Count; index++)
+        {
+            var upLeg = up.Legs[index];
+            var rightLeg = right.Legs[index];
+            Assert.Equal(Distance(upLeg.Root, upLeg.Hip), Distance(rightLeg.Root, rightLeg.Hip), 3);
+            Assert.Equal(Distance(upLeg.Hip, upLeg.Knee), Distance(rightLeg.Hip, rightLeg.Knee), 3);
+            Assert.Equal(Distance(upLeg.Knee, upLeg.Tip), Distance(rightLeg.Knee, rightLeg.Tip), 3);
+            Assert.Equal(upLeg.Layer, rightLeg.Layer);
+        }
+    }
+
+    [Fact]
     public void Create_动漫桌宠轮廓采用宽伏腹部紧凑头胸与厚实节肢()
     {
         var layout = SpiderLayout.Create(256, 256, 1);
@@ -124,6 +364,48 @@ public sealed class WhiteJadeSpiderSceneTests
         Assert.True(layout.Head.MidY < layout.Abdomen.MidY);
         Assert.All(layout.Legs, leg =>
             Assert.True(leg.Width >= layout.Abdomen.Height * 0.16f));
+    }
+
+    [Fact]
+    public void Create_八足采用隐藏根部与三段扇形布局()
+    {
+        var layout = SpiderLayout.Create(320, 320, 1);
+
+        Assert.Equal(8, layout.Legs.Count);
+        Assert.All(layout.Legs, leg =>
+        {
+            Assert.True(float.IsFinite(leg.Root.X) && float.IsFinite(leg.Root.Y));
+            Assert.True(float.IsFinite(leg.Hip.X) && float.IsFinite(leg.Hip.Y));
+            Assert.True(float.IsFinite(leg.Knee.X) && float.IsFinite(leg.Knee.Y));
+            Assert.True(float.IsFinite(leg.Tip.X) && float.IsFinite(leg.Tip.Y));
+            Assert.True(Distance(leg.Root, leg.Hip) > 0);
+            Assert.True(Distance(leg.Hip, leg.Knee) > 0);
+            Assert.True(Distance(leg.Knee, leg.Tip) > 0);
+            Assert.True(Math.Abs(leg.Root.X - layout.Center.X) < Math.Abs(leg.Hip.X - layout.Center.X));
+        });
+
+        for (var side = 0; side < 2; side++)
+        {
+            var legs = layout.Legs.Skip(side * 4).Take(4).ToArray();
+            for (var index = 1; index < legs.Length; index++)
+            {
+                Assert.True(legs[index - 1].Hip.Y < legs[index].Hip.Y);
+            }
+        }
+    }
+
+    [Fact]
+    public void Create_前两对腿位于身体前景而后两对位于后景()
+    {
+        var layout = SpiderLayout.Create(320, 320, 1);
+
+        for (var side = 0; side < 2; side++)
+        {
+            Assert.Equal(SpiderLegLayer.AboveBody, layout.Legs[side * 4].Layer);
+            Assert.Equal(SpiderLegLayer.AboveBody, layout.Legs[side * 4 + 1].Layer);
+            Assert.Equal(SpiderLegLayer.BehindBody, layout.Legs[side * 4 + 2].Layer);
+            Assert.Equal(SpiderLegLayer.BehindBody, layout.Legs[side * 4 + 3].Layer);
+        }
     }
 
     [Fact]
@@ -242,11 +524,22 @@ public sealed class WhiteJadeSpiderSceneTests
         new(mode, PetMood.Curious, 0.35f, -0.2f, time, 1, "observe");
 
     private static SKBitmap Render(WhiteJadeSpiderScene scene, RenderSnapshot snapshot)
+        => Render(scene, snapshot, 256, 256);
+
+    private static SKBitmap Render(
+        WhiteJadeSpiderScene scene,
+        RenderSnapshot snapshot,
+        int width,
+        int height)
     {
-        var bitmap = new SKBitmap(256, 256, SKColorType.Bgra8888, SKAlphaType.Premul);
+        var bitmap = new SKBitmap(
+            width,
+            height,
+            SKColorType.Bgra8888,
+            SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.Transparent);
-        scene.Draw(canvas, snapshot);
+        scene.Draw(canvas, snapshot, width, height);
         return bitmap;
     }
 
@@ -267,6 +560,13 @@ public sealed class WhiteJadeSpiderSceneTests
         return count;
     }
 
+    private static float Distance(SKPoint from, SKPoint to)
+    {
+        var deltaX = to.X - from.X;
+        var deltaY = to.Y - from.Y;
+        return MathF.Sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
     private static int CountDifferentPixels(SKBitmap left, SKBitmap right)
     {
         var count = 0;
@@ -284,11 +584,395 @@ public sealed class WhiteJadeSpiderSceneTests
         return count;
     }
 
+    private static SKColor PixelAtMidpoint(SKBitmap bitmap, SKPoint start, SKPoint end) =>
+        bitmap.GetPixel(
+            (int)MathF.Round((start.X + end.X) / 2),
+            (int)MathF.Round((start.Y + end.Y) / 2));
+
+    private static void AssertOuterLegSegment(
+        SKBitmap bitmap,
+        SKPoint start,
+        SKPoint end,
+        float startWidth,
+        float endWidth,
+        SKColor bodyColor,
+        string description)
+    {
+        var segment = SpiderLimbGeometry.Create(
+            start,
+            end,
+            startWidth,
+            endWidth);
+        Assert.True(segment.IsValid, $"{description} 的几何无效。");
+        AssertPointInside(bitmap, segment.StartSideA, description);
+        AssertPointInside(bitmap, segment.StartSideB, description);
+        AssertPointInside(bitmap, segment.EndSideA, description);
+        AssertPointInside(bitmap, segment.EndSideB, description);
+
+        // 避开关节端帽与身体遮挡，在目标段内部三个位置独立确认中性玉材像素。
+        foreach (var amount in new[] { 0.45f, 0.65f, 0.82f })
+        {
+            var center = Lerp(start, end, amount);
+            var width = startWidth + (endWidth - startWidth) * amount;
+            var searchRadius = Math.Max(1, (int)MathF.Ceiling(width * 0.18f));
+            Assert.True(
+                HasJadeLegPixelNear(
+                    bitmap,
+                    center,
+                    searchRadius,
+                    bodyColor),
+                $"{description} 在中心线 {amount:P0} 附近没有检测到异于身体图集的中性玉足像素。");
+        }
+
+        // 从段中心沿两侧法线越过最大半宽；至少一侧回到透明背景，排除“大块身体碰巧不透明”。
+        var directionX = end.X - start.X;
+        var directionY = end.Y - start.Y;
+        var length = MathF.Sqrt(directionX * directionX + directionY * directionY);
+        Assert.True(length > 0, $"{description} 长度必须大于零。");
+        var normal = new SKPoint(directionY / length, -directionX / length);
+        const float outsideAmount = 0.72f;
+        var outsideCenter = Lerp(start, end, outsideAmount);
+        var outsideWidth =
+            startWidth + (endWidth - startWidth) * outsideAmount;
+        var outsideDistance = Math.Max(5, outsideWidth * 1.4f);
+        var sideA = new SKPoint(
+            outsideCenter.X + normal.X * outsideDistance,
+            outsideCenter.Y + normal.Y * outsideDistance);
+        var sideB = new SKPoint(
+            outsideCenter.X - normal.X * outsideDistance,
+            outsideCenter.Y - normal.Y * outsideDistance);
+        Assert.True(
+            HasOnlyLowAlphaNear(bitmap, sideA, 1)
+                || HasOnlyLowAlphaNear(bitmap, sideB, 1),
+            $"{description} 两侧法线外采样均被大块不透明区域占据，无法证明目标是细长外足。");
+    }
+
+    private static void AssertPointInside(
+        SKBitmap bitmap,
+        SKPoint point,
+        string description) =>
+        Assert.True(
+            point.X >= 0
+                && point.Y >= 0
+                && point.X < bitmap.Width
+                && point.Y < bitmap.Height,
+            $"{description} 的边界点 ({point.X:F1}, {point.Y:F1}) 超出视口。");
+
+    private static bool HasJadeLegPixelNear(
+        SKBitmap bitmap,
+        SKPoint center,
+        int radius,
+        SKColor bodyColor)
+    {
+        var centerX = (int)MathF.Round(center.X);
+        var centerY = (int)MathF.Round(center.Y);
+        for (var y = centerY - radius; y <= centerY + radius; y++)
+        {
+            for (var x = centerX - radius; x <= centerX + radius; x++)
+            {
+                if (x < 0 || y < 0 || x >= bitmap.Width || y >= bitmap.Height)
+                {
+                    continue;
+                }
+
+                var pixel = bitmap.GetPixel(x, y);
+                var maximumChannel = Math.Max(
+                    pixel.Red,
+                    Math.Max(pixel.Green, pixel.Blue));
+                var minimumChannel = Math.Min(
+                    pixel.Red,
+                    Math.Min(pixel.Green, pixel.Blue));
+                var bodyDistance =
+                    Math.Abs(pixel.Red - bodyColor.Red)
+                    + Math.Abs(pixel.Green - bodyColor.Green)
+                    + Math.Abs(pixel.Blue - bodyColor.Blue);
+                if (pixel.Alpha >= 24
+                    && maximumChannel - minimumChannel <= 80
+                    && bodyDistance >= 120)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasOnlyLowAlphaNear(
+        SKBitmap bitmap,
+        SKPoint center,
+        int radius)
+    {
+        var centerX = (int)MathF.Round(center.X);
+        var centerY = (int)MathF.Round(center.Y);
+        if (centerX - radius < 0
+            || centerY - radius < 0
+            || centerX + radius >= bitmap.Width
+            || centerY + radius >= bitmap.Height)
+        {
+            return false;
+        }
+
+        for (var y = centerY - radius; y <= centerY + radius; y++)
+        {
+            for (var x = centerX - radius; x <= centerX + radius; x++)
+            {
+                if (bitmap.GetPixel(x, y).Alpha > 16)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static void AssertTransparentBorder(
+        SKBitmap bitmap,
+        int thickness,
+        string context)
+    {
+        Assert.InRange(thickness, 1, Math.Min(bitmap.Width, bitmap.Height) / 2);
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            for (var offset = 0; offset < thickness; offset++)
+            {
+                AssertBorderPixel(bitmap, offset, y, context);
+                AssertBorderPixel(
+                    bitmap,
+                    bitmap.Width - 1 - offset,
+                    y,
+                    context);
+            }
+        }
+
+        for (var x = 0; x < bitmap.Width; x++)
+        {
+            for (var offset = 0; offset < thickness; offset++)
+            {
+                AssertBorderPixel(bitmap, x, offset, context);
+                AssertBorderPixel(
+                    bitmap,
+                    x,
+                    bitmap.Height - 1 - offset,
+                    context);
+            }
+        }
+    }
+
+    private static void AssertBorderPixel(
+        SKBitmap bitmap,
+        int x,
+        int y,
+        string context) =>
+        Assert.True(
+            bitmap.GetPixel(x, y).Alpha <= 8,
+            $"{context} 在边带 ({x},{y}) 出现不透明像素。");
+
+    private static void AssertPoseInsideSafeViewport(
+        SpiderPose pose,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding,
+        string context) =>
+        Assert.True(
+            pose.ContentBounds.Left >= safePadding
+                && pose.ContentBounds.Top >= safePadding
+                && pose.ContentBounds.Right <= viewportWidth - safePadding
+                && pose.ContentBounds.Bottom <= viewportHeight - safePadding,
+            $"{context} 的姿态范围 {pose.ContentBounds} 未留出 {safePadding}px 安全边带。");
+
+    private static int CountOuterSegmentsInsideViewport(
+        SpiderPose pose,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding)
+    {
+        var count = 0;
+        foreach (var leg in pose.Legs)
+        {
+            count += IsSegmentInsideViewport(
+                SpiderLimbGeometry.Create(
+                    leg.Hip,
+                    leg.Knee,
+                    leg.Width * 0.76f,
+                    leg.Width * 0.52f),
+                viewportWidth,
+                viewportHeight,
+                safePadding) ? 1 : 0;
+            count += IsSegmentInsideViewport(
+                SpiderLimbGeometry.Create(
+                    leg.Knee,
+                    leg.Tip,
+                    leg.Width * 0.52f,
+                    leg.Width * 0.20f),
+                viewportWidth,
+                viewportHeight,
+                safePadding) ? 1 : 0;
+        }
+
+        return count;
+    }
+
+    private static bool IsSegmentInsideViewport(
+        SpiderLimbSegment segment,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding) =>
+        segment.IsValid
+        && IsPointInsideViewport(
+            segment.StartSideA,
+            viewportWidth,
+            viewportHeight,
+            safePadding)
+        && IsPointInsideViewport(
+            segment.StartSideB,
+            viewportWidth,
+            viewportHeight,
+            safePadding)
+        && IsPointInsideViewport(
+            segment.EndSideA,
+            viewportWidth,
+            viewportHeight,
+            safePadding)
+        && IsPointInsideViewport(
+            segment.EndSideB,
+            viewportWidth,
+            viewportHeight,
+            safePadding);
+
+    private static bool IsPointInsideViewport(
+        SKPoint point,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding) =>
+        point.X >= safePadding
+        && point.Y >= safePadding
+        && point.X <= viewportWidth - safePadding
+        && point.Y <= viewportHeight - safePadding;
+
+    private static SKPoint Lerp(SKPoint start, SKPoint end, float amount) =>
+        new(
+            start.X + (end.X - start.X) * amount,
+            start.Y + (end.Y - start.Y) * amount);
+
+    private static string ReadSceneSource()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var path = Path.Combine(
+                directory.FullName,
+                "src",
+                "Honey.Rendering",
+                "Spider",
+                "WhiteJadeSpiderScene.cs");
+            if (File.Exists(path))
+            {
+                return File.ReadAllText(path);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException("无法定位 WhiteJadeSpiderScene.cs。");
+    }
+
     private static void SavePreview(SKBitmap bitmap, string fileName)
     {
         var directory = Path.Combine(Path.GetTempPath(), "honey-task7-stage-preview");
         Directory.CreateDirectory(directory);
-        using var stream = File.Create(Path.Combine(directory, fileName));
-        bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);
+        var finalPath = Path.Combine(directory, fileName);
+        var temporaryPath = Path.Combine(
+            directory,
+            $".{fileName}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None))
+            {
+                bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);
+            }
+
+            File.Move(temporaryPath, finalPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
+    private sealed class ContrastingBodyAtlas : ISpiderBodyAtlas
+    {
+        private readonly SKBitmap _bitmap;
+
+        public ContrastingBodyAtlas(SKColor color)
+        {
+            _bitmap = new SKBitmap(
+                128,
+                128,
+                SKColorType.Bgra8888,
+                SKAlphaType.Premul);
+            using var canvas = new SKCanvas(_bitmap);
+            canvas.Clear(SKColors.Transparent);
+            using var paint = new SKPaint
+            {
+                IsAntialias = true,
+                Color = color,
+                Style = SKPaintStyle.Fill
+            };
+            canvas.DrawOval(new SKRect(18, 38, 110, 112), paint);
+            canvas.DrawOval(new SKRect(39, 8, 89, 58), paint);
+        }
+
+        public bool TryGetFrame(
+            PetMode mode,
+            SpiderDirection direction,
+            out SpiderAtlasFrame frame)
+        {
+            frame = new SpiderAtlasFrame(
+                _bitmap,
+                new SKRectI(0, 0, _bitmap.Width, _bitmap.Height),
+                new SKPoint(0.5f, 0.54f));
+            return true;
+        }
+
+        public void Dispose() => _bitmap.Dispose();
+    }
+
+    private sealed class SolidBodyAtlas(SKColor color) : ISpiderBodyAtlas
+    {
+        private readonly SKBitmap _bitmap = CreateBitmap(color);
+
+        public bool TryGetFrame(
+            PetMode mode,
+            SpiderDirection direction,
+            out SpiderAtlasFrame frame)
+        {
+            frame = new SpiderAtlasFrame(
+                _bitmap,
+                new SKRectI(0, 0, _bitmap.Width, _bitmap.Height),
+                new SKPoint(0.5f, 0.5f));
+            return true;
+        }
+
+        public void Dispose() => _bitmap.Dispose();
+
+        private static SKBitmap CreateBitmap(SKColor color)
+        {
+            var bitmap = new SKBitmap(
+                8,
+                8,
+                SKColorType.Bgra8888,
+                SKAlphaType.Premul);
+            bitmap.Erase(color);
+            return bitmap;
+        }
     }
 }

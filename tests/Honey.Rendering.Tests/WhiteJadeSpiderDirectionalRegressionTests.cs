@@ -24,6 +24,77 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
     }
 
     [Fact]
+    public void 狂暴斜向会绘制足量血玉像素并保存预览()
+    {
+        using var scene = new WhiteJadeSpiderScene();
+        using var berserk = Render(
+            scene,
+            Snapshot(0.707f, -0.707f) with { Mode = PetMode.Berserk });
+
+        Assert.True(CountOpaque(berserk) > 500);
+        SavePreview(berserk, "berserk-diagonal.png");
+    }
+
+    [Fact]
+    public void 狂暴斜向的十六个外足段均呈红玉材质且区别于普通态()
+    {
+        var bodyColor = new SKColor(14, 210, 235, 255);
+        var berserkSnapshot = Snapshot(0.707f, -0.707f) with
+        {
+            Mode = PetMode.Berserk,
+            AnimationTime = 0,
+            Behavior = string.Empty
+        };
+        var normalSnapshot = berserkSnapshot with { Mode = PetMode.Normal };
+        var viewport =
+            SpiderViewportMetrics.ForScale(berserkSnapshot.Scale);
+        var viewportWidth = (int)MathF.Ceiling(viewport.Width);
+        var viewportHeight = (int)MathF.Ceiling(viewport.Height);
+        var pose = SpiderGeometry.CreatePose(
+            viewportWidth,
+            viewportHeight,
+            berserkSnapshot);
+        using var atlas = new ContrastingBodyAtlas(bodyColor);
+        using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
+        using var berserk = Render(
+            scene,
+            berserkSnapshot,
+            viewportWidth,
+            viewportHeight);
+        using var normal = Render(
+            scene,
+            normalSnapshot,
+            viewportWidth,
+            viewportHeight);
+
+        var verifiedSegments = 0;
+        for (var legIndex = 0; legIndex < pose.Legs.Count; legIndex++)
+        {
+            var leg = pose.Legs[legIndex];
+            AssertBerserkSegmentMaterial(
+                berserk,
+                normal,
+                leg.Hip,
+                leg.Knee,
+                leg.Width * 0.76f,
+                bodyColor,
+                $"第{legIndex + 1}条腿的髋膝段");
+            verifiedSegments++;
+            AssertBerserkSegmentMaterial(
+                berserk,
+                normal,
+                leg.Knee,
+                leg.Tip,
+                leg.Width * 0.52f,
+                bodyColor,
+                $"第{legIndex + 1}条腿的膝足段");
+            verifiedSegments++;
+        }
+
+        Assert.Equal(16, verifiedSegments);
+    }
+
+    [Fact]
     public void 场景会把量化并校准后的方向交给图集()
     {
         using var atlas = new TrackingAtlas();
@@ -58,15 +129,22 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
     private static SKBitmap Render(
         WhiteJadeSpiderScene scene,
         RenderSnapshot snapshot)
+        => Render(scene, snapshot, 256, 256);
+
+    private static SKBitmap Render(
+        WhiteJadeSpiderScene scene,
+        RenderSnapshot snapshot,
+        int width,
+        int height)
     {
         var bitmap = new SKBitmap(
-            256,
-            256,
+            width,
+            height,
             SKColorType.Bgra8888,
             SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.Transparent);
-        scene.Draw(canvas, snapshot);
+        scene.Draw(canvas, snapshot, width, height);
         return bitmap;
     }
 
@@ -104,6 +182,109 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         return count;
     }
 
+    private static void AssertBerserkSegmentMaterial(
+        SKBitmap berserk,
+        SKBitmap normal,
+        SKPoint start,
+        SKPoint end,
+        float segmentWidth,
+        SKColor bodyColor,
+        string description)
+    {
+        var berserkRedSamples = 0;
+        var normalNeutralSamples = 0;
+        var normalRedSamples = 0;
+        // 后景腿靠身体的一端会按设计被遮挡，因此取各外段更靠外的三个内部位置。
+        foreach (var amount in new[] { 0.60f, 0.75f, 0.88f })
+        {
+            var sample = new SKPoint(
+                start.X + (end.X - start.X) * amount,
+                start.Y + (end.Y - start.Y) * amount);
+            var radius = Math.Max(
+                1,
+                (int)MathF.Ceiling(segmentWidth * 0.18f));
+            berserkRedSamples += HasPixelNear(
+                berserk,
+                sample,
+                radius,
+                pixel => IsRedJadePixel(pixel, bodyColor)) ? 1 : 0;
+            normalNeutralSamples += HasPixelNear(
+                normal,
+                sample,
+                radius,
+                pixel => IsNeutralJadePixel(pixel, bodyColor)) ? 1 : 0;
+            normalRedSamples += HasPixelNear(
+                normal,
+                sample,
+                radius,
+                pixel => IsRedJadePixel(pixel, bodyColor)) ? 1 : 0;
+        }
+
+        Assert.True(
+            berserkRedSamples >= 2,
+            $"{description} 只有 {berserkRedSamples}/3 个内部采样点呈红玉材质。");
+        Assert.True(
+            normalNeutralSamples >= 2,
+            $"{description} 的普通态缺少中性白玉负对照。");
+        Assert.Equal(0, normalRedSamples);
+    }
+
+    private static bool HasPixelNear(
+        SKBitmap bitmap,
+        SKPoint center,
+        int radius,
+        Func<SKColor, bool> predicate)
+    {
+        var centerX = (int)MathF.Round(center.X);
+        var centerY = (int)MathF.Round(center.Y);
+        if (centerX - radius < 0
+            || centerY - radius < 0
+            || centerX + radius >= bitmap.Width
+            || centerY + radius >= bitmap.Height)
+        {
+            return false;
+        }
+
+        for (var y = centerY - radius; y <= centerY + radius; y++)
+        {
+            for (var x = centerX - radius; x <= centerX + radius; x++)
+            {
+                if (predicate(bitmap.GetPixel(x, y)))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsRedJadePixel(SKColor pixel, SKColor bodyColor) =>
+        pixel.Alpha >= 24
+        && pixel.Red >= pixel.Green + 24
+        && pixel.Red >= pixel.Blue + 18
+        && ColorDistance(pixel, bodyColor) >= 120;
+
+    private static bool IsNeutralJadePixel(
+        SKColor pixel,
+        SKColor bodyColor)
+    {
+        var maximumChannel = Math.Max(
+            pixel.Red,
+            Math.Max(pixel.Green, pixel.Blue));
+        var minimumChannel = Math.Min(
+            pixel.Red,
+            Math.Min(pixel.Green, pixel.Blue));
+        return pixel.Alpha >= 24
+            && maximumChannel - minimumChannel <= 80
+            && ColorDistance(pixel, bodyColor) >= 120;
+    }
+
+    private static int ColorDistance(SKColor pixel, SKColor reference) =>
+        Math.Abs(pixel.Red - reference.Red)
+        + Math.Abs(pixel.Green - reference.Green)
+        + Math.Abs(pixel.Blue - reference.Blue);
+
     private static SKPointI CenterOfOpaque(SKBitmap bitmap)
     {
         long sumX = 0;
@@ -133,8 +314,30 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
             Path.GetTempPath(),
             "honey-pet-codex-preview");
         Directory.CreateDirectory(directory);
-        using var stream = File.Create(Path.Combine(directory, fileName));
-        bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);
+        var finalPath = Path.Combine(directory, fileName);
+        var temporaryPath = Path.Combine(
+            directory,
+            $".{fileName}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None))
+            {
+                bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);
+            }
+
+            File.Move(temporaryPath, finalPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
     }
 
     private sealed class MissingAtlas : ISpiderBodyAtlas
@@ -151,6 +354,44 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         public void Dispose()
         {
         }
+    }
+
+    private sealed class ContrastingBodyAtlas : ISpiderBodyAtlas
+    {
+        private readonly SKBitmap _bitmap;
+
+        public ContrastingBodyAtlas(SKColor color)
+        {
+            _bitmap = new SKBitmap(
+                128,
+                128,
+                SKColorType.Bgra8888,
+                SKAlphaType.Premul);
+            using var canvas = new SKCanvas(_bitmap);
+            canvas.Clear(SKColors.Transparent);
+            using var paint = new SKPaint
+            {
+                IsAntialias = true,
+                Color = color,
+                Style = SKPaintStyle.Fill
+            };
+            canvas.DrawOval(new SKRect(18, 38, 110, 112), paint);
+            canvas.DrawOval(new SKRect(39, 8, 89, 58), paint);
+        }
+
+        public bool TryGetFrame(
+            PetMode mode,
+            SpiderDirection direction,
+            out SpiderAtlasFrame frame)
+        {
+            frame = new SpiderAtlasFrame(
+                _bitmap,
+                new SKRectI(0, 0, _bitmap.Width, _bitmap.Height),
+                new SKPoint(0.5f, 0.54f));
+            return true;
+        }
+
+        public void Dispose() => _bitmap.Dispose();
     }
 
     private sealed class TrackingAtlas : ISpiderBodyAtlas
