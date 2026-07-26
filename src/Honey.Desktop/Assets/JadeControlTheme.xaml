@@ -1,0 +1,15 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="JadeSurfaceBrush" Color="#102624"/>
+    <SolidColorBrush x:Key="JadeSurfaceRaisedBrush" Color="#17302F"/>
+    <SolidColorBrush x:Key="JadeBorderBrush" Color="#4F7D75"/>
+    <SolidColorBrush x:Key="JadeTextBrush" Color="#E7FFF8"/>
+    <SolidColorBrush x:Key="JadeMutedTextBrush" Color="#8BA7A2"/>
+    <SolidColorBrush x:Key="JadeAccentBrush" Color="#8ED7CA"/>
+    <SolidColorBrush x:Key="JadeAccentStrongBrush" Color="#A9F5E7"/>
+    <SolidColorBrush x:Key="JadeSelectionBrush" Color="#1D4943"/>
+    <SolidColorBrush x:Key="JadeDisabledBrush" Color="#526763"/>
+    <SolidColorBrush x:Key="JadeErrorBrush" Color="#FF8C86"/>
+    <SolidColorBrush x:Key="JadeTransparentBrush" Color="Transparent"/>
+</ResourceDictionary>

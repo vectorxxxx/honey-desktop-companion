@@ -21,4 +21,10 @@
     <ProjectReference Include="..\..\src\Honey.Integrations\Honey.Integrations.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\src\Honey.Desktop\Assets\JadeControlTheme.xaml"
+             Link="Fixtures\JadeControlTheme.xaml"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
