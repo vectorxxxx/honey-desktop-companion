@@ -30,13 +30,44 @@
                 Visibility="Collapsed"
                 IsHitTestVisible="False"
                 Panel.ZIndex="9"
-                AutomationProperties.LiveSetting="Polite">
-            <TextBlock x:Name="ThoughtText"
-                       Foreground="#E7FFF8"
-                       FontFamily="Microsoft YaHei UI"
-                       FontSize="12"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center"/>
+                 AutomationProperties.LiveSetting="Polite">
+            <StackPanel>
+                <Border x:Name="ThoughtSourceContainer"
+                        Margin="0,0,0,7"
+                        Padding="7,3"
+                        HorizontalAlignment="Center"
+                        Background="#302D2860"
+                        BorderBrush="#7971C9"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Data="{StaticResource IconBot}"
+                              Width="11"
+                              Height="11"
+                              Stretch="Uniform"
+                              Stroke="#C5C0FF"
+                              StrokeThickness="1.8"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"/>
+                        <TextBlock x:Name="ThoughtSourceBadge"
+                                   Margin="5,0,0,0"
+                                   Text="AI 决策"
+                                   Foreground="#D7D3FF"
+                                   FontFamily="Microsoft YaHei UI"
+                                   FontSize="9"
+                                   FontWeight="SemiBold"
+                                   Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+                <TextBlock x:Name="ThoughtText"
+                           Foreground="#E7FFF8"
+                           FontFamily="Microsoft YaHei UI"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"/>
+            </StackPanel>
         </Border>
 
         <Canvas x:Name="RadialMenu"

@@ -793,7 +793,8 @@ public partial class App : System.Windows.Application
                 overlay.ShowThought(
                     result.Available
                         ? result.Text ?? "小玉安静地陪在你身边。"
-                        : FailureMessage(result.FailureCode));
+                        : FailureMessage(result.FailureCode),
+                    ThoughtSource.Ai);
             }
         });
     }

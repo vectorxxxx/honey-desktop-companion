@@ -24,6 +24,12 @@ using SkiaSharp.Views.Desktop;
 
 namespace Honey.Desktop;
 
+public enum ThoughtSource
+{
+    Local,
+    Ai
+}
+
 public partial class OverlayWindow : Window
 {
     private const int WmNcHitTest = 0x0084;
@@ -154,17 +160,22 @@ public partial class OverlayWindow : Window
             + $"压力{NeedBand(state.Needs.Stress)}";
     }
 
-    public void ShowThought(string text)
+    public void ShowThought(string text, ThoughtSource source = ThoughtSource.Local)
     {
         if (!Dispatcher.CheckAccess())
         {
-            _ = Dispatcher.BeginInvoke(() => ShowThought(text));
+            _ = Dispatcher.BeginInvoke(() => ShowThought(text, source));
             return;
         }
 
         ThoughtText.Text = string.IsNullOrWhiteSpace(text)
             ? "小玉歪了歪头，继续自己的探索。"
             : text.Trim()[..Math.Min(text.Trim().Length, 800)];
+        var aiVisible = source == ThoughtSource.Ai
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ThoughtSourceBadge.Visibility = aiVisible;
+        ThoughtSourceContainer.Visibility = aiVisible;
         ThoughtBubble.Visibility = Visibility.Visible;
         _thoughtTimer.Stop();
         _thoughtTimer.Start();
