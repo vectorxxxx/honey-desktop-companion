@@ -213,6 +213,54 @@ public sealed class SpiderHitMapTests
     }
 
     [Fact]
+    public void Create_零长度骨段仅按关节点距离命中()
+    {
+        var joint = new SkiaSharp.SKPoint(20, 20);
+        var leg = new SpiderLeg(
+            joint,
+            joint,
+            joint,
+            joint,
+            4,
+            SpiderLegLayer.BehindBody);
+        var hitMap = SpiderHitMap.Create(PoseWithSingleLeg(leg));
+
+        Assert.True(hitMap.Contains(25, 20));
+        Assert.False(hitMap.Contains(100, 100));
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(1, true)]
+    [InlineData(2, false)]
+    [InlineData(3, true)]
+    public void Create_任一非有限腿部端点均不会误命中透明区域(
+        int pointIndex,
+        bool useInfinity)
+    {
+        var invalid = useInfinity ? float.PositiveInfinity : float.NaN;
+        var points = new[]
+        {
+            new SkiaSharp.SKPoint(20, 20),
+            new SkiaSharp.SKPoint(30, 25),
+            new SkiaSharp.SKPoint(40, 30),
+            new SkiaSharp.SKPoint(50, 35)
+        };
+        points[pointIndex] = new SkiaSharp.SKPoint(invalid, points[pointIndex].Y);
+        var leg = new SpiderLeg(
+            points[0],
+            points[1],
+            points[2],
+            points[3],
+            4,
+            SpiderLegLayer.BehindBody);
+        var hitMap = SpiderHitMap.Create(PoseWithSingleLeg(leg));
+
+        Assert.False(hitMap.Contains(180, 180));
+        Assert.False(hitMap.Contains(70, 160));
+    }
+
+    [Fact]
     public void CreateForSnapshot_斜向身体只命中旋转后的真实椭圆()
     {
         var abdomen = new OrientedEllipse(
@@ -244,4 +292,27 @@ public sealed class SpiderHitMapTests
 
     private static RenderSnapshot Snapshot(PetMood mood, double time) =>
         new(PetMode.Normal, mood, 0, 0, time, 1, "observe");
+
+    private static SpiderPose PoseWithSingleLeg(SpiderLeg leg)
+    {
+        var abdomen = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 240),
+            12,
+            10,
+            0);
+        var head = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 220),
+            8,
+            6,
+            0);
+        return new SpiderPose(
+            260,
+            260,
+            1,
+            new SkiaSharp.SKPoint(240, 240),
+            abdomen,
+            head,
+            [leg],
+            new SkiaSharp.SKRect(18, 18, 252, 252));
+    }
 }
