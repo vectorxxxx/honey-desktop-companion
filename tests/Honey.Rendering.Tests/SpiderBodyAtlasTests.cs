@@ -69,10 +69,10 @@ public sealed class SpiderBodyAtlasTests
 
         Assert.True(ownedAtlas.TryGetFrame(
             PetMode.Normal,
-            new SpiderDirection(0, 0),
-            out var bottomRowFrame));
-        Assert.Equal(66, bottomRowFrame.Source.Bottom);
-        Assert.InRange(bottomRowFrame.Source.Height, 16, 17);
+            new SpiderDirection(15, 0),
+            out var last));
+        Assert.Equal(66, last.Source.Right);
+        Assert.Equal(66, last.Source.Bottom);
     }
 
     [Fact]
@@ -95,26 +95,27 @@ public sealed class SpiderBodyAtlasTests
     }
 
     [Fact]
-    public void 默认素材会把逻辑朝向映射到生成图的半转台并镜像左侧()
+    public void 默认图集会逐格提供完整十六向且不隐式镜像()
     {
         using var atlas = EmbeddedSpiderBodyAtlas.LoadDefault();
-        Assert.True(atlas.TryGetFrame(
-            PetMode.Normal,
-            new SpiderDirection(0, 0),
-            out var up));
-        Assert.True(atlas.TryGetFrame(
-            PetMode.Normal,
-            new SpiderDirection(4, MathF.PI / 2),
-            out var right));
-        Assert.True(atlas.TryGetFrame(
-            PetMode.Normal,
-            new SpiderDirection(12, MathF.PI * 1.5f),
-            out var left));
+        var sources = new HashSet<SKRectI>();
+        for (var index = 0; index < SpiderDirection.Count; index++)
+        {
+            Assert.True(atlas.TryGetFrame(
+                PetMode.Normal,
+                new SpiderDirection(index, index * MathF.Tau / SpiderDirection.Count),
+                out var frame));
+            Assert.False(frame.FlipX);
+            Assert.Equal(
+                (int)MathF.Round((index % 4) * frame.Bitmap.Width / 4f),
+                frame.Source.Left);
+            Assert.Equal(
+                (int)MathF.Round((index / 4) * frame.Bitmap.Height / 4f),
+                frame.Source.Top);
+            sources.Add(frame.Source);
+        }
 
-        Assert.True(up.Source.Top > right.Source.Top);
-        Assert.False(right.FlipX);
-        Assert.True(left.FlipX);
-        Assert.Equal(right.Source, left.Source);
+        Assert.Equal(SpiderDirection.Count, sources.Count);
     }
 
     private static MemoryStream CreateAtlasStream() => CreatePngStream(64, 64);

@@ -80,6 +80,7 @@ public sealed class PetRuntimeController :
     private PetState _state;
     private AppSettings _settings;
     private ActiveBehaviorState _activeBehavior;
+    private bool _activeBehaviorOpen = true;
     private PetStatusSnapshot _status;
     private volatile bool _paused;
     private volatile bool _hidden;
@@ -417,10 +418,21 @@ public sealed class PetRuntimeController :
         BehaviorOrigin origin,
         string? detail = null)
     {
+        var now = _timeProvider.GetUtcNow();
+        if (_activeBehaviorOpen)
+        {
+            _activityJournal.Append(new PetActivityEntry(
+                now,
+                _activeBehavior.Behavior,
+                _activeBehavior.Origin,
+                PetActivityOutcome.Interrupted,
+                $"被 {skill.Key.Value} 替换"));
+            _activeBehaviorOpen = false;
+        }
+
         _player.Start(skill);
         _currentFrame = _player.Advance(TimeSpan.Zero);
         _lastStarted[skill.Key] = _skillClock;
-        var now = _timeProvider.GetUtcNow();
         _activeBehavior = new ActiveBehaviorState(
             skill.Key,
             _currentFrame.Phase,
@@ -432,6 +444,7 @@ public sealed class PetRuntimeController :
             origin,
             PetActivityOutcome.Started,
             detail));
+        _activeBehaviorOpen = true;
         _state = _state with
         {
             PreviousBehavior = skill.Key,
@@ -458,11 +471,14 @@ public sealed class PetRuntimeController :
             _activeBehavior = _activeBehavior with { Phase = _currentFrame.Phase };
             if (!_player.IsPlaying)
             {
+                var now = _timeProvider.GetUtcNow();
                 _activityJournal.Append(new PetActivityEntry(
-                    _timeProvider.GetUtcNow(),
+                    now,
                     _activeBehavior.Behavior,
                     _activeBehavior.Origin,
                     PetActivityOutcome.Completed));
+                _activeBehaviorOpen = false;
+                EnterIdleLocked(now);
             }
 
             return;
@@ -474,6 +490,24 @@ public sealed class PetRuntimeController :
         }
 
         StartSkillLocked(SelectSkill(_skillClock), BehaviorOrigin.LocalAutonomy);
+    }
+
+    private void EnterIdleLocked(DateTimeOffset now)
+    {
+        var observe = new BehaviorKey(BuiltInBehaviorKeys.Observe);
+        _currentFrame = new SkillFrame(observe, string.Empty, 0, 0, false);
+        _activeBehavior = new ActiveBehaviorState(
+            observe,
+            string.Empty,
+            BehaviorOrigin.SystemSchedule,
+            now);
+        _activityJournal.Append(new PetActivityEntry(
+            now,
+            observe,
+            BehaviorOrigin.SystemSchedule,
+            PetActivityOutcome.Started,
+            "技能结束后待机观察"));
+        _activeBehaviorOpen = true;
     }
 
     private SkillDefinition SelectSkill(TimeSpan now)

@@ -9,6 +9,8 @@ public enum SpiderDetailLevel
 
 public static class SpiderDetailLevelSelector
 {
+    public const float ReferencePetPixels = 140;
+
     public static SpiderDetailLevel Select(float displayPixels)
     {
         if (!float.IsFinite(displayPixels) || displayPixels < 90)
@@ -20,4 +22,7 @@ public static class SpiderDetailLevelSelector
             ? SpiderDetailLevel.Standard
             : SpiderDetailLevel.Showcase;
     }
+
+    public static SpiderDetailLevel SelectFromPetScale(float petScale) =>
+        Select(ReferencePetPixels * petScale);
 }

@@ -123,8 +123,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             bounds.Height,
             safe,
             deviceScale);
-        var detailLevel = SpiderDetailLevelSelector.Select(
-            MathF.Min(bounds.Width, bounds.Height) * safe.Scale);
+        var detailLevel = SpiderDetailLevelSelector.SelectFromPetScale(safe.Scale);
         DrawPose(canvas, safe, pose, bounds, detailLevel, offsetX, offsetY);
     }
 
@@ -136,8 +135,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         ArgumentNullException.ThrowIfNull(pose);
         var safe = snapshot.Normalize();
         var bounds = new SKRect(0, 0, pose.ViewportWidth, pose.ViewportHeight);
-        var detailLevel = SpiderDetailLevelSelector.Select(
-            MathF.Min(bounds.Width, bounds.Height) * safe.Scale);
+        var detailLevel = SpiderDetailLevelSelector.SelectFromPetScale(safe.Scale);
         DrawPose(canvas, safe, pose, bounds, detailLevel, 0, 0);
     }
 
@@ -159,7 +157,8 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         }
         _webScene.Draw(canvas, new SKRect(0, 0, bounds.Width, bounds.Height), safe);
         DrawLegs(canvas, pose, safe, detailLevel, drawFront: false);
-        var direction = _directionSelector.Select(safe.FacingX, safe.FacingY);
+        var direction = SpiderArtworkDirectionMap.Map(
+            _directionSelector.Select(safe.FacingX, safe.FacingY));
         var atlasDrawn = false;
         if (_atlas is not null
             && _atlas.TryGetFrame(safe.Mode, direction, out var frame))

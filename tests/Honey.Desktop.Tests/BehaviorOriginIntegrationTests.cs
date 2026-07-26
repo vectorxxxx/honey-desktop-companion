@@ -43,6 +43,23 @@ public sealed class BehaviorOriginIntegrationTests
     }
 
     [Fact]
+    public void 用户用新技能替换旧技能时会记录旧行为中断()
+    {
+        using var runtime = CreateRuntime();
+        var play = new BehaviorKey(BuiltInBehaviorKeys.Play);
+        var sleep = new BehaviorKey(BuiltInBehaviorKeys.Sleep);
+        runtime.RequestSkill(play);
+
+        runtime.RequestSkill(sleep);
+
+        Assert.Equal(sleep.Value, runtime.Status.Behavior);
+        Assert.Single(
+            runtime.Status.RecentActivities,
+            entry => entry.Behavior == play
+                && entry.Outcome == PetActivityOutcome.Interrupted);
+    }
+
+    [Fact]
     public void AI接受时记录来源而拒绝时不污染当前来源()
     {
         using var runtime = CreateRuntime();
@@ -75,6 +92,8 @@ public sealed class BehaviorOriginIntegrationTests
             runtime.Status.RecentActivities,
             entry => entry.Behavior == new BehaviorKey(BuiltInBehaviorKeys.Pounce)
                 && entry.Outcome == PetActivityOutcome.Completed);
+        Assert.Equal(BuiltInBehaviorKeys.Observe, runtime.Status.Behavior);
+        Assert.Equal(BehaviorOrigin.SystemSchedule, runtime.Status.Origin);
     }
 
     [Fact]

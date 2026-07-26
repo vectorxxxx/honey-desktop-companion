@@ -24,14 +24,14 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
     }
 
     [Fact]
-    public void 场景会把量化后的方向交给图集()
+    public void 场景会把量化并校准后的方向交给图集()
     {
         using var atlas = new TrackingAtlas();
         using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
         using var up = Render(scene, Snapshot(0, -1));
         using var diagonal = Render(scene, Snapshot(0.707f, -0.707f));
 
-        Assert.Equal([0, 2], atlas.RequestedDirections);
+        Assert.Equal([12, 9], atlas.RequestedDirections);
     }
 
     [Fact]

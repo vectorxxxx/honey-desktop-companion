@@ -28,4 +28,19 @@ public sealed class SpiderDetailLevelTests
             SpiderDetailLevel.Compact,
             SpiderDetailLevelSelector.Select(displayPixels));
     }
+
+    [Theory]
+    [InlineData(60, SpiderDetailLevel.Compact)]
+    [InlineData(140, SpiderDetailLevel.Standard)]
+    [InlineData(240, SpiderDetailLevel.Showcase)]
+    public void 会从运行时宠物缩放还原实际配置像素(
+        float configuredPixels,
+        SpiderDetailLevel expected)
+    {
+        var scale = configuredPixels / 140f;
+
+        Assert.Equal(
+            expected,
+            SpiderDetailLevelSelector.SelectFromPetScale(scale));
+    }
 }
