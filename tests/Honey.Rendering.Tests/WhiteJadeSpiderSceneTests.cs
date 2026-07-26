@@ -130,9 +130,32 @@ public sealed class WhiteJadeSpiderSceneTests
         var stillLeg = still.Legs[0];
         var movingLeg = moving.Legs[0];
         Assert.Equal(stillLeg.Root, movingLeg.Root);
-        Assert.NotEqual(stillLeg.Hip, movingLeg.Hip);
-        Assert.NotEqual(stillLeg.Knee, movingLeg.Knee);
-        Assert.NotEqual(stillLeg.Tip, movingLeg.Tip);
+        var hipDisplacement = Distance(stillLeg.Hip, movingLeg.Hip);
+        var kneeDisplacement = Distance(stillLeg.Knee, movingLeg.Knee);
+        var tipDisplacement = Distance(stillLeg.Tip, movingLeg.Tip);
+        Assert.True(0 < hipDisplacement);
+        Assert.True(hipDisplacement < kneeDisplacement);
+        Assert.True(kneeDisplacement < tipDisplacement);
+    }
+
+    [Fact]
+    public void CreatePose_移动步态让左右同编号与同侧相邻腿反相()
+    {
+        var still = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 0
+        });
+        var moving = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal, 0) with
+        {
+            NormalizedSpeed = 1,
+            StridePhase = 0.25f
+        });
+
+        var firstTipDisplacement = moving.Legs[0].Tip.Y - still.Legs[0].Tip.Y;
+        var oppositeSideTipDisplacement = moving.Legs[4].Tip.Y - still.Legs[4].Tip.Y;
+        var adjacentTipDisplacement = moving.Legs[1].Tip.Y - still.Legs[1].Tip.Y;
+        Assert.True(firstTipDisplacement * oppositeSideTipDisplacement < 0);
+        Assert.True(firstTipDisplacement * adjacentTipDisplacement < 0);
     }
 
     [Fact]

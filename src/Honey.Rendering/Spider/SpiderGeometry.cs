@@ -38,8 +38,9 @@ public static class SpiderGeometry
         {
             var leg = layout.Legs[index];
             var moving = safe.NormalizedSpeed > 0.01f;
+            var gaitParity = ((index % 4) + (index / 4)) % 2;
             var phase = moving
-                ? safe.StridePhase * MathF.Tau + index % 2 * MathF.PI
+                ? safe.StridePhase * MathF.Tau + gaitParity * MathF.PI
                 : (float)(safe.AnimationTime * cadence + index * Math.PI / 2);
             var amplitude = moving
                 ? leg.Width * moodAmplitude * (1.2f + safe.NormalizedSpeed * 1.8f)
