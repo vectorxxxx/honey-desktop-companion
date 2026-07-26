@@ -45,6 +45,25 @@ public sealed class SettingsMovementContractTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void 非模态设置窗口保存成功后直接关闭而不设置对话框结果()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "SettingsWindow.xaml.cs"));
+
+        Assert.DoesNotContain("DialogResult =", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "await _save(",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Close();",
+            source,
+            StringComparison.Ordinal);
+    }
+
     private static XElement FindNamed(XDocument document, string name) =>
         Assert.Single(document.Descendants(), element =>
             string.Equals(

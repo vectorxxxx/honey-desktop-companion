@@ -99,7 +99,6 @@ public partial class SettingsWindow : Window
             await _save(
                 new AiSettingsSubmission(requested, key, _clearKey),
                 CancellationToken.None);
-            DialogResult = true;
             Close();
         }
         catch (Exception exception)
