@@ -24,6 +24,18 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
     }
 
     [Fact]
+    public void 狂暴斜向会绘制足量血玉像素并保存预览()
+    {
+        using var scene = new WhiteJadeSpiderScene();
+        using var berserk = Render(
+            scene,
+            Snapshot(0.707f, -0.707f) with { Mode = PetMode.Berserk });
+
+        Assert.True(CountOpaque(berserk) > 500);
+        SavePreview(berserk, "berserk-diagonal.png");
+    }
+
+    [Fact]
     public void 场景会把量化并校准后的方向交给图集()
     {
         using var atlas = new TrackingAtlas();

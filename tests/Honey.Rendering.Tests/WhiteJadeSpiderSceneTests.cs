@@ -57,6 +57,53 @@ public sealed class WhiteJadeSpiderSceneTests
         SavePreview(berserk, "berserk-preview.png");
     }
 
+    [Theory]
+    [InlineData(60, 300, 5_000, 16)]
+    [InlineData(140, 1_500, 20_000, 16)]
+    [InlineData(240, 4_000, 40_000, 8)]
+    public void Draw_三档尺寸保持透明边角且完整绘制可见外足(
+        int petPixels,
+        int minimumOpaquePixels,
+        int maximumOpaquePixels,
+        int minimumVisibleSegments)
+    {
+        var snapshot = Snapshot(PetMode.Normal) with
+        {
+            Scale = petPixels / SpiderDetailLevelSelector.ReferencePetPixels
+        };
+        var pose = SpiderGeometry.CreatePose(256, 256, snapshot);
+        using var scene = new WhiteJadeSpiderScene();
+        using var bitmap = Render(scene, snapshot);
+
+        Assert.Equal((byte)0, bitmap.GetPixel(0, 0).Alpha);
+        Assert.Equal((byte)0, bitmap.GetPixel(255, 255).Alpha);
+        Assert.InRange(
+            CountOpaque(bitmap),
+            minimumOpaquePixels,
+            maximumOpaquePixels);
+
+        var visibleSegments = 0;
+        foreach (var leg in pose.Legs)
+        {
+            visibleSegments += AssertVisibleSegmentIfInside(
+                bitmap,
+                leg.Hip,
+                leg.Knee,
+                leg.Width * 0.76f,
+                petPixels);
+            visibleSegments += AssertVisibleSegmentIfInside(
+                bitmap,
+                leg.Knee,
+                leg.Tip,
+                leg.Width * 0.52f,
+                petPixels);
+        }
+
+        Assert.True(
+            visibleSegments >= minimumVisibleSegments,
+            $"{petPixels}px 仅有 {visibleSegments} 段外足中点位于画布内并得到验证。");
+    }
+
     [Fact]
     public void Draw_相同快照产生确定输出而时间变化会改变步态()
     {
@@ -440,6 +487,52 @@ public sealed class WhiteJadeSpiderSceneTests
         bitmap.GetPixel(
             (int)MathF.Round((start.X + end.X) / 2),
             (int)MathF.Round((start.Y + end.Y) / 2));
+
+    private static int AssertVisibleSegmentIfInside(
+        SKBitmap bitmap,
+        SKPoint start,
+        SKPoint end,
+        float segmentWidth,
+        int petPixels)
+    {
+        var midpoint = new SKPoint(
+            (start.X + end.X) / 2,
+            (start.Y + end.Y) / 2);
+        var radius = Math.Max(2, (int)MathF.Ceiling(segmentWidth * 0.6f));
+        if (midpoint.X < radius
+            || midpoint.Y < radius
+            || midpoint.X >= bitmap.Width - radius
+            || midpoint.Y >= bitmap.Height - radius)
+        {
+            return 0;
+        }
+
+        Assert.True(
+            HasOpaquePixelNear(bitmap, midpoint, radius),
+            $"{petPixels}px 外足在 ({midpoint.X:F1}, {midpoint.Y:F1}) 附近未绘制非透明像素。");
+        return 1;
+    }
+
+    private static bool HasOpaquePixelNear(
+        SKBitmap bitmap,
+        SKPoint center,
+        int radius)
+    {
+        var centerX = (int)MathF.Round(center.X);
+        var centerY = (int)MathF.Round(center.Y);
+        for (var y = centerY - radius; y <= centerY + radius; y++)
+        {
+            for (var x = centerX - radius; x <= centerX + radius; x++)
+            {
+                if (bitmap.GetPixel(x, y).Alpha > 8)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     private static string ReadSceneSource()
     {
