@@ -127,6 +127,48 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
+    public void Create_八足采用隐藏根部与三段扇形布局()
+    {
+        var layout = SpiderLayout.Create(320, 320, 1);
+
+        Assert.Equal(8, layout.Legs.Count);
+        Assert.All(layout.Legs, leg =>
+        {
+            Assert.True(float.IsFinite(leg.Root.X) && float.IsFinite(leg.Root.Y));
+            Assert.True(float.IsFinite(leg.Hip.X) && float.IsFinite(leg.Hip.Y));
+            Assert.True(float.IsFinite(leg.Knee.X) && float.IsFinite(leg.Knee.Y));
+            Assert.True(float.IsFinite(leg.Tip.X) && float.IsFinite(leg.Tip.Y));
+            Assert.True(Distance(leg.Root, leg.Hip) > 0);
+            Assert.True(Distance(leg.Hip, leg.Knee) > 0);
+            Assert.True(Distance(leg.Knee, leg.Tip) > 0);
+            Assert.True(Math.Abs(leg.Root.X - layout.Center.X) < Math.Abs(leg.Hip.X - layout.Center.X));
+        });
+
+        for (var side = 0; side < 2; side++)
+        {
+            var legs = layout.Legs.Skip(side * 4).Take(4).ToArray();
+            for (var index = 1; index < legs.Length; index++)
+            {
+                Assert.True(legs[index - 1].Hip.Y < legs[index].Hip.Y);
+            }
+        }
+    }
+
+    [Fact]
+    public void Create_前两对腿位于身体前景而后两对位于后景()
+    {
+        var layout = SpiderLayout.Create(320, 320, 1);
+
+        for (var side = 0; side < 2; side++)
+        {
+            Assert.Equal(SpiderLegLayer.AboveBody, layout.Legs[side * 4].Layer);
+            Assert.Equal(SpiderLegLayer.AboveBody, layout.Legs[side * 4 + 1].Layer);
+            Assert.Equal(SpiderLegLayer.BehindBody, layout.Legs[side * 4 + 2].Layer);
+            Assert.Equal(SpiderLegLayer.BehindBody, layout.Legs[side * 4 + 3].Layer);
+        }
+    }
+
+    [Fact]
     public void For_常态为冷白灰玉而狂暴态呈血玉内光()
     {
         var normal = SpiderMaterialPalette.For(PetMode.Normal);
@@ -265,6 +307,13 @@ public sealed class WhiteJadeSpiderSceneTests
         }
 
         return count;
+    }
+
+    private static float Distance(SKPoint from, SKPoint to)
+    {
+        var deltaX = to.X - from.X;
+        var deltaY = to.Y - from.Y;
+        return MathF.Sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
     private static int CountDifferentPixels(SKBitmap left, SKBitmap right)
