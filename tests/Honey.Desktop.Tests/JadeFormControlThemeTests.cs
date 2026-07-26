@@ -92,6 +92,9 @@ public sealed class JadeFormControlThemeTests
         var increase =
             GetNamedElement(template, "IncreaseRepeatButton", "RepeatButton");
         var thumb = GetNamedElement(template, "SliderThumb", "Thumb");
+        var topTickBar = GetNamedElement(template, "TopTickBar", "TickBar");
+        var bottomTickBar =
+            GetNamedElement(template, "BottomTickBar", "TickBar");
 
         AssertTemplateBinding(track, "Minimum", "Minimum");
         AssertTemplateBinding(track, "Maximum", "Maximum");
@@ -110,6 +113,48 @@ public sealed class JadeFormControlThemeTests
         Assert.Equal(
             "{StaticResource JadeSliderThumb}",
             GetAttribute(thumb, "Style"));
+        Assert.Equal(
+            "{x:Static Slider.DecreaseLarge}",
+            GetAttribute(decrease, "Command"));
+        Assert.Equal(
+            "{x:Static Slider.IncreaseLarge}",
+            GetAttribute(increase, "Command"));
+        AssertBinding(
+            decrease,
+            "CommandTarget",
+            null,
+            ("RelativeSource", "{RelativeSource TemplatedParent}"));
+        AssertBinding(
+            increase,
+            "CommandTarget",
+            null,
+            ("RelativeSource", "{RelativeSource TemplatedParent}"));
+
+        AssertTickBarConnections(topTickBar, "Top");
+        AssertTickBarConnections(bottomTickBar, "Bottom");
+        AssertBinding(
+            topTickBar,
+            "ReservedSpace",
+            "ActualWidth",
+            ("ElementName", "SliderThumb"));
+        AssertBinding(
+            bottomTickBar,
+            "ReservedSpace",
+            "ActualWidth",
+            ("ElementName", "SliderThumb"));
+
+        var topLeft = GetTemplateTrigger(template, "TickPlacement", "TopLeft");
+        AssertSetter(topLeft, "TopTickBar", "Visibility", "Visible");
+        var bottomRight =
+            GetTemplateTrigger(template, "TickPlacement", "BottomRight");
+        AssertSetter(
+            bottomRight,
+            "BottomTickBar",
+            "Visibility",
+            "Visible");
+        var both = GetTemplateTrigger(template, "TickPlacement", "Both");
+        AssertSetter(both, "TopTickBar", "Visibility", "Visible");
+        AssertSetter(both, "BottomTickBar", "Visibility", "Visible");
 
         var decreaseStyle = GetNamedStyle("JadeSliderDecreaseButton");
         var decreaseTrack = GetNamedElement(
@@ -132,6 +177,8 @@ public sealed class JadeFormControlThemeTests
         Assert.Equal("#294943", GetAttribute(increaseTrack, "Background"));
 
         var thumbStyle = GetNamedStyle("JadeSliderThumb");
+        AssertStyleSetter(thumbStyle, "Width", "22");
+        AssertStyleSetter(thumbStyle, "Height", "22");
         var thumbTemplate = GetControlTemplate(thumbStyle);
         var focusRing =
             GetNamedElement(thumbTemplate, "SliderThumbFocusRing", "Border");
@@ -179,8 +226,9 @@ public sealed class JadeFormControlThemeTests
         AssertTemplateBinding(inputBorder, "Background", "Background");
         AssertTemplateBinding(inputBorder, "BorderBrush", "BorderBrush");
         AssertTemplateBinding(inputBorder, "BorderThickness", "BorderThickness");
+        AssertTemplateBinding(inputBorder, "Padding", "Padding");
         Assert.Equal("5", GetAttribute(inputBorder, "CornerRadius"));
-        AssertTemplateBinding(contentHost, "Margin", "Padding");
+        Assert.Null(contentHost.Attribute("Margin"));
 
         AssertSetter(
             GetTemplateTrigger(template, "IsMouseOver", "True"),
@@ -226,8 +274,9 @@ public sealed class JadeFormControlThemeTests
         AssertTemplateBinding(inputBorder, "Background", "Background");
         AssertTemplateBinding(inputBorder, "BorderBrush", "BorderBrush");
         AssertTemplateBinding(inputBorder, "BorderThickness", "BorderThickness");
+        AssertTemplateBinding(inputBorder, "Padding", "Padding");
         Assert.Equal("5", GetAttribute(inputBorder, "CornerRadius"));
-        AssertTemplateBinding(contentHost, "Margin", "Padding");
+        Assert.Null(contentHost.Attribute("Margin"));
         Assert.Empty(template.Descendants(Presentation + "TextBlock"));
         Assert.Empty(template.Descendants(Presentation + "TextBox"));
 
@@ -363,6 +412,22 @@ public sealed class JadeFormControlThemeTests
             style,
             "CaretBrush",
             "{StaticResource JadeAccentStrongBrush}");
+    }
+
+    private static void AssertTickBarConnections(
+        XElement tickBar,
+        string placement)
+    {
+        Assert.Equal(placement, GetAttribute(tickBar, "Placement"));
+        AssertTemplateBinding(tickBar, "Ticks", "Ticks");
+        AssertTemplateBinding(tickBar, "Minimum", "Minimum");
+        AssertTemplateBinding(tickBar, "Maximum", "Maximum");
+        AssertTemplateBinding(tickBar, "TickFrequency", "TickFrequency");
+        AssertTemplateBinding(
+            tickBar,
+            "IsDirectionReversed",
+            "IsDirectionReversed");
+        Assert.Equal("Collapsed", GetAttribute(tickBar, "Visibility"));
     }
 
     private static void AssertInputDisabledState(XElement template)

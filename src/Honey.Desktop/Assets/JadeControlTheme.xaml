@@ -531,6 +531,7 @@
                                  Maximum="{TemplateBinding Maximum}"
                                  Minimum="{TemplateBinding Minimum}"
                                  Placement="Top"
+                                 ReservedSpace="{Binding ActualWidth, ElementName=SliderThumb}"
                                  SelectionEnd="{TemplateBinding SelectionEnd}"
                                  SelectionStart="{TemplateBinding SelectionStart}"
                                  TickFrequency="{TemplateBinding TickFrequency}"
@@ -545,6 +546,7 @@
                                  Maximum="{TemplateBinding Maximum}"
                                  Minimum="{TemplateBinding Minimum}"
                                  Placement="Bottom"
+                                 ReservedSpace="{Binding ActualWidth, ElementName=SliderThumb}"
                                  SelectionEnd="{TemplateBinding SelectionEnd}"
                                  SelectionStart="{TemplateBinding SelectionStart}"
                                  TickFrequency="{TemplateBinding TickFrequency}"
@@ -630,9 +632,9 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="5"
+                                Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
                                           VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
@@ -694,9 +696,9 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="5"
+                                Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
                                           VerticalAlignment="Center"/>
                         </Border>
                     </Grid>
