@@ -5,10 +5,10 @@ namespace Honey.Rendering.Spider;
 public readonly record struct SpiderLimbSegment(
     SKPoint Start,
     SKPoint End,
-    SKPoint StartTop,
-    SKPoint StartBottom,
-    SKPoint EndTop,
-    SKPoint EndBottom,
+    SKPoint StartSideA,
+    SKPoint StartSideB,
+    SKPoint EndSideA,
+    SKPoint EndSideB,
     float StartWidth,
     float EndWidth,
     float AngleRadians,
@@ -34,30 +34,50 @@ public static class SpiderLimbGeometry
             return default;
         }
 
-        var x = end.X - start.X;
-        var y = end.Y - start.Y;
-        var length = MathF.Sqrt(x * x + y * y);
-        if (!float.IsFinite(length) || length <= MinimumLength)
+        var x = (double)end.X - start.X;
+        var y = (double)end.Y - start.Y;
+        var length = Math.Sqrt(x * x + y * y);
+        if (!double.IsFinite(length) || length <= MinimumLength)
         {
             return default;
         }
 
         var normalX = y / length;
         var normalY = -x / length;
-        var startHalfWidth = startWidth / 2;
-        var endHalfWidth = endWidth / 2;
-        return new SpiderLimbSegment(
+        var startHalfWidth = (double)startWidth / 2;
+        var endHalfWidth = (double)endWidth / 2;
+        var segment = new SpiderLimbSegment(
             start,
             end,
-            new SKPoint(start.X + normalX * startHalfWidth, start.Y + normalY * startHalfWidth),
-            new SKPoint(start.X - normalX * startHalfWidth, start.Y - normalY * startHalfWidth),
-            new SKPoint(end.X + normalX * endHalfWidth, end.Y + normalY * endHalfWidth),
-            new SKPoint(end.X - normalX * endHalfWidth, end.Y - normalY * endHalfWidth),
+            new SKPoint(
+                (float)(start.X + normalX * startHalfWidth),
+                (float)(start.Y + normalY * startHalfWidth)),
+            new SKPoint(
+                (float)(start.X - normalX * startHalfWidth),
+                (float)(start.Y - normalY * startHalfWidth)),
+            new SKPoint(
+                (float)(end.X + normalX * endHalfWidth),
+                (float)(end.Y + normalY * endHalfWidth)),
+            new SKPoint(
+                (float)(end.X - normalX * endHalfWidth),
+                (float)(end.Y - normalY * endHalfWidth)),
             startWidth,
             endWidth,
-            MathF.Atan2(y, x),
+            (float)Math.Atan2(y, x),
             true);
+        return IsFinite(segment) ? segment : default;
     }
 
     private static bool IsFinite(SKPoint point) => float.IsFinite(point.X) && float.IsFinite(point.Y);
+
+    private static bool IsFinite(SpiderLimbSegment segment) =>
+        IsFinite(segment.Start)
+        && IsFinite(segment.End)
+        && IsFinite(segment.StartSideA)
+        && IsFinite(segment.StartSideB)
+        && IsFinite(segment.EndSideA)
+        && IsFinite(segment.EndSideB)
+        && float.IsFinite(segment.StartWidth)
+        && float.IsFinite(segment.EndWidth)
+        && float.IsFinite(segment.AngleRadians);
 }
