@@ -115,6 +115,33 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
+    public void Create_动漫桌宠轮廓采用宽伏腹部紧凑头胸与厚实节肢()
+    {
+        var layout = SpiderLayout.Create(256, 256, 1);
+
+        Assert.True(layout.Abdomen.Width > layout.Abdomen.Height * 1.25f);
+        Assert.True(layout.Head.Width < layout.Abdomen.Width * 0.72f);
+        Assert.True(layout.Head.MidY < layout.Abdomen.MidY);
+        Assert.All(layout.Legs, leg =>
+            Assert.True(leg.Width >= layout.Abdomen.Height * 0.16f));
+    }
+
+    [Fact]
+    public void For_常态为冷白灰玉而狂暴态呈血玉内光()
+    {
+        var normal = SpiderMaterialPalette.For(PetMode.Normal);
+        var berserk = SpiderMaterialPalette.For(PetMode.Berserk);
+
+        Assert.True(normal.BodyMiddle.Red >= 210);
+        Assert.True(normal.BodyMiddle.Green >= 215);
+        Assert.True(normal.BodyMiddle.Blue >= 220);
+        Assert.InRange(Math.Abs(normal.BodyMiddle.Green - normal.BodyMiddle.Blue), 0, 18);
+        Assert.True(berserk.BodyMiddle.Red > berserk.BodyMiddle.Green * 2);
+        Assert.True(berserk.InternalGlow.Red >= 235);
+        Assert.True(berserk.InternalGlow.Alpha > normal.InternalGlow.Alpha);
+    }
+
+    [Fact]
     public void Draw_默认路径与显式共享姿态产生相同像素()
     {
         using var scene = new WhiteJadeSpiderScene();

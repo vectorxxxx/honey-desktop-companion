@@ -35,6 +35,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         Style = SKPaintStyle.Stroke
     };
     private readonly SKPaint _bodyPaint = new() { IsAntialias = true };
+    private readonly SKPaint _glowPaint = new() { IsAntialias = true };
     private readonly SKPaint _socketPaint = new() { IsAntialias = true };
     private readonly SKPaint _irisPaint = new() { IsAntialias = true };
     private readonly SKPaint _skillPaint = new()
@@ -121,15 +122,14 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         _webScene.Draw(canvas, new SKRect(0, 0, bounds.Width, bounds.Height), safe);
         DrawLegs(canvas, pose, safe);
         DrawBody(canvas, pose, safe);
+        DrawMouthparts(canvas, pose, safe);
         DrawEyes(canvas, pose, safe);
         canvas.Restore();
     }
 
     private void DrawSkillProps(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
     {
-        var jade = snapshot.Mode == PetMode.Berserk
-            ? new SKColor(244, 67, 64, 210)
-            : new SKColor(176, 248, 234, 210);
+        var jade = SpiderMaterialPalette.For(snapshot.Mode).LegSurface.WithAlpha(210);
         _skillPaint.Color = jade;
         _skillPaint.StrokeWidth = Math.Max(1.5f, pose.DeviceScale * 2);
         _skillPaint.Style = SKPaintStyle.Stroke;
@@ -297,9 +297,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
     private void DrawParticles(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
     {
         var berserk = snapshot.Mode == PetMode.Berserk;
-        var baseColor = berserk
-            ? new SKColor(240, 48, 44, 125)
-            : new SKColor(165, 246, 234, 95);
+        var baseColor = SpiderMaterialPalette.For(snapshot.Mode).Particle;
         var span = pose.Abdomen.Height * 1.1f;
         for (var index = 0; index < 14; index++)
         {
@@ -320,40 +318,60 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
 
     private void DrawLegs(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
     {
-        var berserk = snapshot.Mode == PetMode.Berserk;
-        _legShadowPaint.Color =
-            berserk ? new SKColor(122, 14, 18, 150) : new SKColor(28, 86, 80, 115);
-        _legJadePaint.Color =
-            berserk ? new SKColor(237, 111, 103, 235) : new SKColor(198, 242, 231, 235);
+        var palette = SpiderMaterialPalette.For(snapshot.Mode);
+        _legShadowPaint.Color = palette.LegShadow;
+        _legJadePaint.Color = palette.LegSurface;
 
         foreach (var leg in pose.Legs)
         {
-            _legShadowPaint.StrokeWidth = leg.Width * 1.18f;
-            _legJadePaint.StrokeWidth = leg.Width * 0.72f;
+            _legShadowPaint.StrokeWidth = leg.Width * 1.24f;
+            _legJadePaint.StrokeWidth = leg.Width * 0.66f;
             canvas.DrawLine(leg.Root, leg.Knee, _legShadowPaint);
             canvas.DrawLine(leg.Knee, leg.Tip, _legShadowPaint);
             canvas.DrawLine(leg.Root, leg.Knee, _legJadePaint);
             canvas.DrawLine(leg.Knee, leg.Tip, _legJadePaint);
-            canvas.DrawCircle(leg.Knee, leg.Width * 0.43f, _legJadePaint);
+            canvas.DrawCircle(leg.Knee, leg.Width * 0.38f, _legJadePaint);
         }
     }
 
     private void DrawBody(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
     {
         var berserk = snapshot.Mode == PetMode.Berserk;
+        var palette = SpiderMaterialPalette.For(snapshot.Mode);
         var pulse = 0.5f + 0.5f * MathF.Sin((float)(snapshot.AnimationTime * 4.2));
-        var edge = berserk ? new SKColor(93, 9, 15, 245) : new SKColor(51, 115, 107, 230);
-        var middle = berserk
-            ? new SKColor(207, (byte)(48 + pulse * 35), 52, 245)
-            : new SKColor(186, 235, 223, 245);
-        var highlight = berserk ? new SKColor(255, 192, 166, 245) : new SKColor(246, 255, 250, 250);
-        DrawJadeEllipse(canvas, pose.Abdomen, edge, middle, highlight);
-        DrawJadeEllipse(canvas, pose.Head, edge, middle, highlight);
+        DrawJadeEllipse(
+            canvas,
+            pose.Abdomen,
+            palette.BodyEdge,
+            berserk
+                ? new SKColor(
+                    (byte)Math.Min(255, palette.BodyMiddle.Red + pulse * 24),
+                    palette.BodyMiddle.Green,
+                    palette.BodyMiddle.Blue,
+                    palette.BodyMiddle.Alpha)
+                : palette.BodyMiddle,
+            palette.BodyHighlight);
+        DrawJadeEllipse(
+            canvas,
+            pose.Head,
+            palette.BodyEdge,
+            palette.BodyMiddle,
+            palette.BodyHighlight);
+
+        _glowPaint.Color = palette.InternalGlow.WithAlpha(
+            (byte)Math.Clamp(palette.InternalGlow.Alpha * (berserk ? 0.65f + pulse * 0.35f : 1), 0, 255));
+        canvas.DrawOval(
+            SKRect.Create(
+                pose.Abdomen.Left + pose.Abdomen.Width * 0.22f,
+                pose.Abdomen.Top + pose.Abdomen.Height * 0.25f,
+                pose.Abdomen.Width * 0.56f,
+                pose.Abdomen.Height * 0.48f),
+            _glowPaint);
 
         _veinPaint.StrokeWidth = Math.Max(1, pose.Abdomen.Width * 0.025f);
         _veinPaint.Color = berserk
-            ? new SKColor(255, 72, 58, (byte)(100 + pulse * 90))
-            : new SKColor(90, 181, 165, 85);
+            ? palette.Vein.WithAlpha((byte)(105 + pulse * 85))
+            : palette.Vein;
         using var veinBuilder = new SKPathBuilder();
         veinBuilder.MoveTo(pose.Abdomen.MidX, pose.Abdomen.Top + pose.Abdomen.Height * 0.18f);
         veinBuilder.CubicTo(
@@ -365,6 +383,39 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             pose.Abdomen.Bottom - pose.Abdomen.Height * 0.15f);
         using var veins = veinBuilder.Detach();
         canvas.DrawPath(veins, _veinPaint);
+    }
+
+    private void DrawMouthparts(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
+    {
+        var palette = SpiderMaterialPalette.For(snapshot.Mode);
+        var forward = new SKPoint(snapshot.FacingX, snapshot.FacingY);
+        var length = MathF.Sqrt(forward.X * forward.X + forward.Y * forward.Y);
+        if (length < 0.001f)
+        {
+            forward = new SKPoint(0, -1);
+        }
+        else
+        {
+            forward = new SKPoint(forward.X / length, forward.Y / length);
+        }
+        var side = new SKPoint(-forward.Y, forward.X);
+        var rootDistance = pose.Head.Width * 0.24f;
+        var fangLength = pose.Head.Width * 0.23f;
+        _legShadowPaint.Color = palette.LegShadow;
+        _legShadowPaint.StrokeWidth = Math.Max(2.2f * pose.DeviceScale, pose.Head.Width * 0.075f);
+        _legJadePaint.Color = palette.LegSurface;
+        _legJadePaint.StrokeWidth = _legShadowPaint.StrokeWidth * 0.48f;
+        for (var direction = -1; direction <= 1; direction += 2)
+        {
+            var root = new SKPoint(
+                pose.Head.MidX + forward.X * rootDistance + side.X * direction * pose.Head.Width * 0.13f,
+                pose.Head.MidY + forward.Y * rootDistance + side.Y * direction * pose.Head.Width * 0.13f);
+            var tip = new SKPoint(
+                root.X + forward.X * fangLength - side.X * direction * pose.Head.Width * 0.06f,
+                root.Y + forward.Y * fangLength - side.Y * direction * pose.Head.Width * 0.06f);
+            canvas.DrawLine(root, tip, _legShadowPaint);
+            canvas.DrawLine(root, tip, _legJadePaint);
+        }
     }
 
     private void DrawJadeEllipse(
@@ -398,17 +449,18 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
     private void DrawEyes(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
     {
         var berserk = snapshot.Mode == PetMode.Berserk;
+        var palette = SpiderMaterialPalette.For(snapshot.Mode);
         var sleepy = snapshot.Mood == PetMood.Sleepy;
         var alert = snapshot.Mood is PetMood.Alert or PetMood.Angry;
         var eyeColor = berserk || snapshot.Mood == PetMood.Angry
             ? new SKColor(255, 38, 34, 255)
             : snapshot.Mood == PetMood.Hungry
                 ? new SKColor(218, 184, 78, 245)
-                : new SKColor(44, 103, 97, 245);
+                : palette.Eye;
         var unit = pose.Head.Width;
         var gazeX = Math.Clamp(snapshot.LookX, -1, 1) * unit * 0.035f;
         var gazeY = Math.Clamp(snapshot.LookY, -1, 1) * unit * 0.025f;
-        _socketPaint.Color = new SKColor(21, 40, 38, 220);
+        _socketPaint.Color = new SKColor(18, 22, 25, 232);
         _irisPaint.Color = eyeColor;
         for (var row = 0; row < 2; row++)
         {
@@ -446,6 +498,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         _veinPaint.Dispose();
         _facetPaint.Dispose();
         _bodyPaint.Dispose();
+        _glowPaint.Dispose();
         _socketPaint.Dispose();
         _irisPaint.Dispose();
         _skillPaint.Dispose();
