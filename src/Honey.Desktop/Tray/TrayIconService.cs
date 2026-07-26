@@ -17,6 +17,7 @@ public sealed class TrayIconService : IDisposable
         _icon = LoadIcon();
         var menu = new Forms.ContextMenuStrip();
         var visibilityItem = new Forms.ToolStripMenuItem("显示/隐藏");
+        var statusItem = new Forms.ToolStripMenuItem("灵兽谱");
         _pausedItem = new Forms.ToolStripMenuItem("暂停自主行为") { CheckOnClick = true };
         _focusItem = new Forms.ToolStripMenuItem("专注模式") { CheckOnClick = true };
         var settingsItem = new Forms.ToolStripMenuItem("设置");
@@ -24,6 +25,7 @@ public sealed class TrayIconService : IDisposable
         menu.Items.AddRange(
         [
             visibilityItem,
+            statusItem,
             _pausedItem,
             _focusItem,
             settingsItem,
@@ -32,6 +34,7 @@ public sealed class TrayIconService : IDisposable
         ]);
 
         visibilityItem.Click += (_, _) => VisibilityToggleRequested?.Invoke(this, EventArgs.Empty);
+        statusItem.Click += (_, _) => StatusRequested?.Invoke(this, EventArgs.Empty);
         _pausedItem.CheckedChanged += (_, _) => PauseChanged?.Invoke(this, _pausedItem.Checked);
         _focusItem.CheckedChanged += (_, _) => FocusModeChanged?.Invoke(this, _focusItem.Checked);
         settingsItem.Click += (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty);
@@ -48,6 +51,7 @@ public sealed class TrayIconService : IDisposable
     }
 
     public event EventHandler? VisibilityToggleRequested;
+    public event EventHandler? StatusRequested;
     public event Action<object?, bool>? PauseChanged;
     public event Action<object?, bool>? FocusModeChanged;
     public event EventHandler? SettingsRequested;

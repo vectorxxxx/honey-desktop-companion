@@ -17,6 +17,7 @@ using Microsoft.Win32;
 using Honey.Desktop.Startup;
 using System.IO;
 using Honey.Desktop.Diagnostics;
+using Honey.Desktop.Status;
 
 namespace Honey.Desktop;
 
@@ -27,6 +28,7 @@ public partial class App : System.Windows.Application
     private OverlayWindow? _overlayWindow;
     private TrayIconService? _trayIcon;
     private SettingsWindow? _settingsWindow;
+    private PetCodexWindow? _petCodexWindow;
     private SettingsStore? _settingsStore;
     private AutoStartService? _autoStart;
     private SettingsApplicationCoordinator? _settingsCoordinator;
@@ -44,6 +46,7 @@ public partial class App : System.Windows.Application
     private ShutdownCoordinator? _shutdownCoordinator;
     private IDisposable? _overlayFocusLease;
     private IDisposable? _settingsFocusLease;
+    private IDisposable? _petCodexFocusLease;
     private AppSettings _settings = new();
     private System.Threading.Timer? _saveTimer;
     private readonly AsyncShutdownOperationQueue _periodicSaveQueue = new();
@@ -229,6 +232,8 @@ public partial class App : System.Windows.Application
         _overlayWindow.PetCommandRequested += OnPetCommandRequested;
         _overlayWindow.SkillCommandRequested += OnSkillCommandRequested;
         _overlayWindow.AiInsightRequested += OnAiInsightRequested;
+        _overlayWindow.StatusRequested += OnStatusRequested;
+        _overlayWindow.RuntimeStatus.StatusChanged += OnPetStatusChanged;
         _overlayWindow.SourceInitialized += (_, _) =>
         {
             _overlayFocusLease?.Dispose();
@@ -251,6 +256,7 @@ public partial class App : System.Windows.Application
         _trayIcon.PauseChanged += OnPauseChanged;
         _trayIcon.FocusModeChanged += OnFocusModeChanged;
         _trayIcon.SettingsRequested += OnSettingsRequested;
+        _trayIcon.StatusRequested += OnTrayStatusRequested;
         _trayIcon.ExitRequested += OnExitRequested;
         _trayIcon.SetFocusMode(_settings.FocusMode);
 
@@ -258,6 +264,7 @@ public partial class App : System.Windows.Application
             PrepareShutdownCoreAsync,
             () => Dispatcher.InvokeAsync(() =>
             {
+                _petCodexWindow?.Close();
                 _overlayWindow?.CloseForExit();
                 Shutdown();
             }).Task,
@@ -330,6 +337,19 @@ public partial class App : System.Windows.Application
         _overlayFocusLease = null;
         _settingsFocusLease?.Dispose();
         _settingsFocusLease = null;
+        _petCodexFocusLease?.Dispose();
+        _petCodexFocusLease = null;
+        if (_overlayWindow is not null)
+        {
+            _overlayWindow.StatusRequested -= OnStatusRequested;
+            _overlayWindow.RuntimeStatus.StatusChanged -= OnPetStatusChanged;
+        }
+        if (_trayIcon is not null)
+        {
+            _trayIcon.StatusRequested -= OnTrayStatusRequested;
+        }
+        _petCodexWindow?.Close();
+        _petCodexWindow = null;
         _settingsWindow = null;
         _aiCoordinator = null;
         _aiConnectionTester = null;
@@ -415,6 +435,78 @@ public partial class App : System.Windows.Application
         _ = SaveSettingsSafelyAsync();
     }
 
+    private void OnTrayStatusRequested(object? sender, EventArgs e) =>
+        OnStatusRequested();
+
+    private void OnStatusRequested()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(OnStatusRequested);
+            return;
+        }
+
+        if (_petCodexWindow is { IsVisible: true })
+        {
+            _petCodexWindow.Activate();
+            return;
+        }
+
+        var source = _overlayWindow?.RuntimeStatus;
+        if (source is null || IsShuttingDown())
+        {
+            return;
+        }
+
+        var window = new PetCodexWindow(source.Status);
+        _petCodexWindow = window;
+        window.SourceInitialized += (_, _) =>
+        {
+            _petCodexFocusLease?.Dispose();
+            _petCodexFocusLease = _focusMode?.RegisterOwnWindow(
+                new WindowInteropHelper(window).Handle);
+        };
+        window.Closed += (_, _) =>
+        {
+            _petCodexFocusLease?.Dispose();
+            _petCodexFocusLease = null;
+            if (ReferenceEquals(_petCodexWindow, window))
+            {
+                _petCodexWindow = null;
+            }
+        };
+        window.Show();
+        PlacePetCodexWithinWorkArea(window);
+        window.Activate();
+    }
+
+    private void OnPetStatusChanged(object? sender, PetStatusSnapshot snapshot)
+    {
+        if (IsShuttingDown()
+            || Dispatcher.HasShutdownStarted
+            || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (_petCodexWindow is not null)
+            {
+                _petCodexWindow.Update(snapshot);
+            }
+        });
+    }
+
+    private static void PlacePetCodexWithinWorkArea(PetCodexWindow window)
+    {
+        var workArea = SystemParameters.WorkArea;
+        var width = window.ActualWidth > 0 ? window.ActualWidth : window.Width;
+        var height = window.ActualHeight > 0 ? window.ActualHeight : window.Height;
+        window.Left = Math.Max(workArea.Left + 24, workArea.Right - width - 24);
+        window.Top = Math.Max(workArea.Top + 24, workArea.Bottom - height - 24);
+    }
+
     private void OnSettingsRequested(object? sender, EventArgs e)
     {
         if (_settingsWindow is { IsVisible: true })
@@ -465,7 +557,14 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        _ = Dispatcher.InvokeAsync(() => _overlayWindow?.RestoreToVisibleWorkArea());
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            _overlayWindow?.RestoreToVisibleWorkArea();
+            if (_petCodexWindow is { IsVisible: true } window)
+            {
+                PlacePetCodexWithinWorkArea(window);
+            }
+        });
     }
 
     private bool IsShuttingDown() =>

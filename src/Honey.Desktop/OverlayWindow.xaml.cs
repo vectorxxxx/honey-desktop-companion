@@ -136,11 +136,13 @@ public partial class OverlayWindow : Window
     public event Action? PetCommandRequested;
     public event Action<BehaviorKey>? SkillCommandRequested;
     public event Action? AiInsightRequested;
+    public event Action? StatusRequested;
 
     public OverlayHitTestPolicy HitTestPolicy => _hitTestPolicy;
     public PetState RuntimeState => _runtime.State;
     public IPetRuntimeCommands RuntimeCommands => _runtime;
     public IPetRuntimeLifecycle RuntimeLifecycle => _runtime;
+    public IPetStatusSource RuntimeStatus => _runtime;
 
     public string CreateAiStateSummary()
     {
@@ -477,6 +479,12 @@ public partial class OverlayWindow : Window
     private void OnAiInsightButtonClick(object sender, RoutedEventArgs e)
     {
         SafeEventDispatcher.Publish(AiInsightRequested, ReportInputError);
+        SetMenuOpen(false);
+    }
+
+    private void OnStatusButtonClick(object sender, RoutedEventArgs e)
+    {
+        SafeEventDispatcher.Publish(StatusRequested, ReportInputError);
         SetMenuOpen(false);
     }
 

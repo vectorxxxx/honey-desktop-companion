@@ -40,8 +40,8 @@
         </Border>
 
         <Canvas x:Name="RadialMenu"
-                Width="260"
-                Height="260"
+                Width="280"
+                Height="280"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Visibility="Collapsed"
@@ -87,7 +87,7 @@
             </Canvas.Resources>
 
             <Button x:Name="PetMenuButton"
-                    Canvas.Left="106" Canvas.Top="10"
+                    Canvas.Left="116" Canvas.Top="8"
                     Style="{StaticResource RadialButtonStyle}"
                     ToolTip="抚摸"
                     AutomationProperties.Name="抚摸白玉蜘蛛"
@@ -102,7 +102,7 @@
                 </Viewbox>
             </Button>
             <Button x:Name="PauseMenuButton"
-                    Canvas.Left="196" Canvas.Top="66"
+                    Canvas.Left="212" Canvas.Top="60"
                     Style="{StaticResource RadialButtonStyle}"
                     ToolTip="暂停或恢复"
                     AutomationProperties.Name="暂停或恢复自主行动"
@@ -116,7 +116,7 @@
                     </Canvas>
                 </Viewbox>
             </Button>
-            <Button Canvas.Left="164" Canvas.Top="172"
+            <Button Canvas.Left="212" Canvas.Top="168"
                     Style="{StaticResource RadialButtonStyle}"
                     ToolTip="休息"
                     AutomationProperties.Name="让白玉蜘蛛休息"
@@ -130,7 +130,7 @@
                     </Canvas>
                 </Viewbox>
             </Button>
-            <Button Canvas.Left="48" Canvas.Top="172"
+            <Button Canvas.Left="20" Canvas.Top="168"
                     Style="{StaticResource RadialButtonStyle}"
                     ToolTip="向灵宠寻求灵感"
                     AutomationProperties.Name="请求 AI 灵感"
@@ -144,7 +144,7 @@
                     </Canvas>
                 </Viewbox>
             </Button>
-            <Button Canvas.Left="16" Canvas.Top="66"
+            <Button Canvas.Left="20" Canvas.Top="60"
                     Style="{StaticResource RadialButtonStyle}"
                     ToolTip="关闭菜单"
                     AutomationProperties.Name="关闭环形菜单"
@@ -156,6 +156,21 @@
                               Data="M18,6 L6,18 M6,6 L18,18" />
                     </Canvas>
                 </Viewbox>
+            </Button>
+            <Button Canvas.Left="116" Canvas.Top="224"
+                    Style="{StaticResource RadialButtonStyle}"
+                    ToolTip="打开灵兽谱"
+                    AutomationProperties.Name="打开小玉灵兽谱"
+                    Click="OnStatusButtonClick">
+                <Path Data="{StaticResource IconActivity}"
+                      Width="22"
+                      Height="22"
+                      Stretch="Uniform"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                      StrokeThickness="2"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      StrokeLineJoin="Round"/>
             </Button>
         </Canvas>
     </Grid>

@@ -40,6 +40,15 @@
     <Content Include="..\..\src\Honey.Desktop\Status\PetCodexWindow.xaml.cs"
              Link="Fixtures\PetCodexWindow.xaml.cs"
              CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Honey.Desktop\OverlayWindow.xaml"
+             Link="Fixtures\OverlayWindow.xaml"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Honey.Desktop\OverlayWindow.xaml.cs"
+             Link="Fixtures\OverlayWindow.xaml.cs"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Honey.Desktop\App.xaml.cs"
+             Link="Fixtures\App.xaml.cs"
+             CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\src\Honey.Desktop\App.xaml"
              Link="Fixtures\App.xaml"
              CopyToOutputDirectory="PreserveNewest" />
