@@ -324,4 +324,494 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <Style TargetType="{x:Type CheckBox}">
+        <Setter Property="Foreground" Value="{StaticResource JadeTextBrush}"/>
+        <Setter Property="Background" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0,5"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <Grid x:Name="CheckRoot"
+                          Background="{TemplateBinding Background}"
+                          SnapsToDevicePixels="True">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="26"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0"
+                              Width="22"
+                              Height="22"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center">
+                            <Border x:Name="CheckFocusRing"
+                                    Width="22"
+                                    Height="22"
+                                    Background="{StaticResource JadeTransparentBrush}"
+                                    BorderBrush="{StaticResource JadeTransparentBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="6"/>
+                            <Border x:Name="CheckFrame"
+                                    Width="18"
+                                    Height="18"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Background="{StaticResource JadeSurfaceBrush}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4">
+                                <Path x:Name="CheckGlyph"
+                                      Width="10"
+                                      Height="7"
+                                      Data="M 1 3.5 L 4 6 L 9 1"
+                                      Fill="{x:Null}"
+                                      Stroke="{StaticResource JadeAccentStrongBrush}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Stretch="Uniform"
+                                      Visibility="Collapsed"/>
+                            </Border>
+                        </Grid>
+                        <ContentPresenter x:Name="CheckContent"
+                                          Grid.Column="1"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Content="{TemplateBinding Content}"
+                                          ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Focusable="False"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="CheckFrame"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="CheckFocusRing"
+                                    Property="BorderBrush"
+                                    Value="#4D8ED7CA"/>
+                            <Setter TargetName="CheckFrame"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckGlyph"
+                                    Property="Visibility"
+                                    Value="Visible"/>
+                            <Setter TargetName="CheckFrame"
+                                    Property="Background"
+                                    Value="#153B36"/>
+                            <Setter TargetName="CheckFrame"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="CheckRoot"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="JadeSliderDecreaseButton"
+           TargetType="{x:Type RepeatButton}">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RepeatButton}">
+                    <Border x:Name="DecreaseTrack"
+                            Height="4"
+                            Background="{StaticResource JadeAccentBrush}"
+                            CornerRadius="2"
+                            VerticalAlignment="Center"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="JadeSliderIncreaseButton"
+           TargetType="{x:Type RepeatButton}">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RepeatButton}">
+                    <Border x:Name="IncreaseTrack"
+                            Height="4"
+                            Background="#294943"
+                            CornerRadius="2"
+                            VerticalAlignment="Center"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="JadeSliderThumb"
+           TargetType="{x:Type Thumb}">
+        <Setter Property="Width" Value="22"/>
+        <Setter Property="Height" Value="22"/>
+        <Setter Property="Background" Value="{StaticResource JadeSurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Grid>
+                        <Border x:Name="SliderThumbFocusRing"
+                                Width="22"
+                                Height="22"
+                                Background="{StaticResource JadeTransparentBrush}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="2"
+                                CornerRadius="11"/>
+                        <Border x:Name="SliderThumbCore"
+                                Width="16"
+                                Height="16"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="{StaticResource JadeSurfaceBrush}"
+                                BorderBrush="{StaticResource JadeAccentBrush}"
+                                BorderThickness="2"
+                                CornerRadius="8"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="SliderThumbCore"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="SliderThumbFocusRing"
+                                    Property="BorderBrush"
+                                    Value="#4D8ED7CA"/>
+                            <Setter TargetName="SliderThumbCore"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type Slider}">
+        <Setter Property="Foreground" Value="{StaticResource JadeAccentBrush}"/>
+        <Setter Property="Background" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="MinHeight" Value="22"/>
+        <Setter Property="Orientation" Value="Horizontal"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Slider}">
+                    <Grid x:Name="SliderRoot"
+                          MinHeight="22"
+                          Background="{TemplateBinding Background}"
+                          SnapsToDevicePixels="True">
+                        <TickBar x:Name="TopTickBar"
+                                 Height="4"
+                                 Margin="0,0,0,18"
+                                 VerticalAlignment="Center"
+                                 Fill="{StaticResource JadeMutedTextBrush}"
+                                 IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                                 Maximum="{TemplateBinding Maximum}"
+                                 Minimum="{TemplateBinding Minimum}"
+                                 Placement="Top"
+                                 SelectionEnd="{TemplateBinding SelectionEnd}"
+                                 SelectionStart="{TemplateBinding SelectionStart}"
+                                 TickFrequency="{TemplateBinding TickFrequency}"
+                                 Ticks="{TemplateBinding Ticks}"
+                                 Visibility="Collapsed"/>
+                        <TickBar x:Name="BottomTickBar"
+                                 Height="4"
+                                 Margin="0,18,0,0"
+                                 VerticalAlignment="Center"
+                                 Fill="{StaticResource JadeMutedTextBrush}"
+                                 IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                                 Maximum="{TemplateBinding Maximum}"
+                                 Minimum="{TemplateBinding Minimum}"
+                                 Placement="Bottom"
+                                 SelectionEnd="{TemplateBinding SelectionEnd}"
+                                 SelectionStart="{TemplateBinding SelectionStart}"
+                                 TickFrequency="{TemplateBinding TickFrequency}"
+                                 Ticks="{TemplateBinding Ticks}"
+                                 Visibility="Collapsed"/>
+                        <Track x:Name="PART_Track"
+                               IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                               Maximum="{TemplateBinding Maximum}"
+                               Minimum="{TemplateBinding Minimum}"
+                               Orientation="{TemplateBinding Orientation}"
+                               Value="{TemplateBinding Value}"
+                               VerticalAlignment="Center">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton x:Name="DecreaseRepeatButton"
+                                              Command="{x:Static Slider.DecreaseLarge}"
+                                              CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                              Style="{StaticResource JadeSliderDecreaseButton}"/>
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb x:Name="SliderThumb"
+                                       Style="{StaticResource JadeSliderThumb}"/>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton x:Name="IncreaseRepeatButton"
+                                              Command="{x:Static Slider.IncreaseLarge}"
+                                              CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                              Style="{StaticResource JadeSliderIncreaseButton}"/>
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="TickPlacement" Value="TopLeft">
+                            <Setter TargetName="TopTickBar"
+                                    Property="Visibility"
+                                    Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="TickPlacement" Value="BottomRight">
+                            <Setter TargetName="BottomTickBar"
+                                    Property="Visibility"
+                                    Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="TickPlacement" Value="Both">
+                            <Setter TargetName="TopTickBar"
+                                    Property="Visibility"
+                                    Value="Visible"/>
+                            <Setter TargetName="BottomTickBar"
+                                    Property="Visibility"
+                                    Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="SliderThumb"
+                                    Property="BorderBrush"
+                                    Value="#4D8ED7CA"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="SliderRoot"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type TextBox}">
+        <Setter Property="Foreground" Value="{StaticResource JadeTextBrush}"/>
+        <Setter Property="Background" Value="{StaticResource JadeSurfaceRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CaretBrush" Value="{StaticResource JadeAccentStrongBrush}"/>
+        <Setter Property="SelectionBrush" Value="{StaticResource JadeSelectionBrush}"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Grid x:Name="InputRoot"
+                          Background="{StaticResource JadeTransparentBrush}">
+                        <Border x:Name="InputBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderThickness"
+                                    Value="2"/>
+                        </Trigger>
+                        <Trigger Property="IsReadOnly" Value="True">
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource JadeMutedTextBrush}"/>
+                            <Setter TargetName="InputBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeSurfaceBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="InputBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="InputRoot"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type PasswordBox}">
+        <Setter Property="Foreground" Value="{StaticResource JadeTextBrush}"/>
+        <Setter Property="Background" Value="{StaticResource JadeSurfaceRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CaretBrush" Value="{StaticResource JadeAccentStrongBrush}"/>
+        <Setter Property="SelectionBrush" Value="{StaticResource JadeSelectionBrush}"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type PasswordBox}">
+                    <Grid x:Name="InputRoot"
+                          Background="{StaticResource JadeTransparentBrush}">
+                        <Border x:Name="InputBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderThickness"
+                                    Value="2"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="InputBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="InputRoot"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type Button}">
+        <Setter Property="Foreground" Value="{StaticResource JadeTextBrush}"/>
+        <Setter Property="Background" Value="#234B47"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Grid x:Name="ButtonRoot"
+                          Background="{StaticResource JadeTransparentBrush}">
+                        <Border x:Name="ButtonFocusRing"
+                                Margin="-3"
+                                Background="{StaticResource JadeTransparentBrush}"
+                                BorderBrush="{StaticResource JadeTransparentBrush}"
+                                BorderThickness="2"
+                                CornerRadius="9"/>
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter x:Name="ButtonContent"
+                                              Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Content="{TemplateBinding Content}"
+                                              ContentStringFormat="{TemplateBinding ContentStringFormat}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Focusable="False"
+                                              RecognizesAccessKey="True"
+                                              SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ButtonBorder"
+                                    Property="Background"
+                                    Value="#2B5852"/>
+                            <Setter TargetName="ButtonBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="ButtonBorder"
+                                    Property="Background"
+                                    Value="#153B36"/>
+                            <Setter TargetName="ButtonBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="ButtonFocusRing"
+                                    Property="BorderBrush"
+                                    Value="#4D8ED7CA"/>
+                        </Trigger>
+                        <Trigger Property="IsDefaulted" Value="True">
+                            <Setter TargetName="ButtonBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                            <Setter TargetName="ButtonBorder"
+                                    Property="BorderThickness"
+                                    Value="2"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource JadeMutedTextBrush}"/>
+                            <Setter TargetName="ButtonBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="ButtonRoot"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 </ResourceDictionary>
