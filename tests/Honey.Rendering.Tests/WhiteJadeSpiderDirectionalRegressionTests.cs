@@ -145,8 +145,30 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
             Path.GetTempPath(),
             "honey-pet-codex-preview");
         Directory.CreateDirectory(directory);
-        using var stream = File.Create(Path.Combine(directory, fileName));
-        bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);
+        var finalPath = Path.Combine(directory, fileName);
+        var temporaryPath = Path.Combine(
+            directory,
+            $".{fileName}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None))
+            {
+                bitmap.Encode(stream, SKEncodedImageFormat.Png, 100);
+            }
+
+            File.Move(temporaryPath, finalPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
     }
 
     private sealed class MissingAtlas : ISpiderBodyAtlas
