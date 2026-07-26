@@ -1,10 +1,20 @@
 using Honey.Domain.Model;
+using Honey.Domain.Movement;
 using Honey.Domain.Species;
 
 namespace Honey.Content.WhiteJadeSpider;
 
 public sealed class WhiteJadeSpiderPack : ISpeciesPack
 {
+    public static PetLocomotionProfile LocomotionProfile { get; } = new(
+        MaxSpeed: 150,
+        Acceleration: 360,
+        DecelerationRadius: 72,
+        ArrivalRadius: 8,
+        MaxTurnRadiansPerSecond: 3.8,
+        BerserkSpeedMultiplier: 1.55,
+        MaximumStep: TimeSpan.FromMilliseconds(100));
+
     private static readonly IReadOnlyList<IBehaviorDefinition> BehaviorDefinitions =
         WhiteJadeSpiderBehaviors.Create();
 

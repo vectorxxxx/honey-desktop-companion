@@ -1,10 +1,25 @@
 using Honey.Domain.Model;
+using Honey.Domain.Movement;
 using Honey.Domain.Species;
 
 namespace Honey.Content.WhiteJadeSpider.Tests;
 
 public sealed class WhiteJadeSpiderPackTests
 {
+    [Fact]
+    public void LocomotionProfile_定义白玉蜘蛛的桌面爬行特征()
+    {
+        var profile = WhiteJadeSpiderPack.LocomotionProfile;
+
+        Assert.InRange(profile.MaxSpeed, 80, 500);
+        Assert.True(profile.Acceleration > profile.MaxSpeed);
+        Assert.True(profile.BerserkSpeedMultiplier > 1);
+        Assert.InRange(
+            profile.MaximumStep,
+            TimeSpan.FromMilliseconds(16),
+            TimeSpan.FromMilliseconds(150));
+    }
+
     [Fact]
     public void 物种包_提供稳定清单行为和等级策略()
     {
