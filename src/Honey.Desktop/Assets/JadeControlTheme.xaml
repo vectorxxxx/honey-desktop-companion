@@ -12,4 +12,316 @@
     <SolidColorBrush x:Key="JadeDisabledBrush" Color="#526763"/>
     <SolidColorBrush x:Key="JadeErrorBrush" Color="#FF8C86"/>
     <SolidColorBrush x:Key="JadeTransparentBrush" Color="Transparent"/>
+
+    <Style x:Key="JadeComboBoxToggleButton"
+           TargetType="{x:Type ToggleButton}">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="ClickMode" Value="Press"/>
+        <Setter Property="Background" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ToggleButton}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <Path Width="10"
+                              Height="6"
+                              Margin="0,0,12,0"
+                              HorizontalAlignment="Right"
+                              VerticalAlignment="Center"
+                              Data="M 1 1 L 5 5 L 9 1"
+                              Fill="{x:Null}"
+                              Stroke="{StaticResource JadeAccentBrush}"
+                              StrokeThickness="1.6"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type ComboBox}">
+        <Setter Property="Foreground" Value="{StaticResource JadeTextBrush}"/>
+        <Setter Property="Background" Value="{StaticResource JadeSurfaceRaisedBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,6,34,6"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ComboBox}">
+                    <Grid x:Name="ComboRoot"
+                          SnapsToDevicePixels="True">
+                        <Border x:Name="ComboBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"/>
+                        <ToggleButton x:Name="DropDownToggle"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      Style="{StaticResource JadeComboBoxToggleButton}"/>
+                        <ContentPresenter x:Name="SelectionPresenter"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        <TextBox x:Name="PART_EditableTextBox"
+                                 Margin="{TemplateBinding Padding}"
+                                 Padding="0"
+                                 HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                 Background="{StaticResource JadeTransparentBrush}"
+                                 BorderThickness="0"
+                                 CaretBrush="{StaticResource JadeAccentStrongBrush}"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 IsReadOnly="{TemplateBinding IsReadOnly}"
+                                 SelectionBrush="{StaticResource JadeSelectionBrush}"
+                                 Style="{x:Null}"
+                                 Visibility="Collapsed"/>
+                        <Popup x:Name="PART_Popup"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               Placement="Bottom"
+                               PopupAnimation="Fade">
+                            <Border x:Name="PopupBorder"
+                                    MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                    MaxHeight="280"
+                                    Margin="0,4,0,0"
+                                    Padding="4"
+                                    Background="{StaticResource JadeSurfaceBrush}"
+                                    BorderBrush="{StaticResource JadeBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                <ScrollViewer CanContentScroll="True"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter TargetName="SelectionPresenter"
+                                    Property="Visibility"
+                                    Value="Collapsed"/>
+                            <Setter TargetName="PART_EditableTextBox"
+                                    Property="Visibility"
+                                    Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="ComboBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                            <Setter TargetName="ComboBorder"
+                                    Property="BorderThickness"
+                                    Value="2"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="ComboBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="ComboBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="ComboRoot"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type ComboBoxItem}">
+        <Setter Property="Foreground" Value="{StaticResource JadeTextBrush}"/>
+        <Setter Property="Background" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                    <Border x:Name="ItemBorder"
+                            MinHeight="34"
+                            Padding="10,6"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="3,0,0,0"
+                            CornerRadius="4"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ItemBorder"
+                                    Property="Background"
+                                    Value="#173735"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="ItemBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeSelectionBrush}"/>
+                            <Setter TargetName="ItemBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="ItemBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground"
+                                    Value="{StaticResource JadeDisabledBrush}"/>
+                            <Setter TargetName="ItemBorder"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="JadeScrollBarThumb"
+           TargetType="{x:Type Thumb}">
+        <Setter Property="MinWidth" Value="8"/>
+        <Setter Property="MinHeight" Value="8"/>
+        <Setter Property="Background" Value="#4C7F76"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Border x:Name="ThumbBorder"
+                            Margin="1"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"/>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ThumbBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="ThumbBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadeAccentStrongBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="JadeScrollBarPageButton"
+           TargetType="{x:Type RepeatButton}">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Background" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RepeatButton}">
+                    <Border Background="{StaticResource JadeTransparentBrush}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type ScrollBar}">
+        <Setter Property="Background" Value="{StaticResource JadeTransparentBrush}"/>
+        <Setter Property="Width" Value="10"/>
+        <Setter Property="Height" Value="Auto"/>
+        <Setter Property="MinWidth" Value="10"/>
+        <Setter Property="MinHeight" Value="10"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ScrollBar}">
+                    <Grid x:Name="ScrollRoot"
+                          Background="{TemplateBinding Background}"
+                          SnapsToDevicePixels="True">
+                        <Track x:Name="PART_Track"
+                               IsDirectionReversed="True"
+                               Maximum="{TemplateBinding Maximum}"
+                               Minimum="{TemplateBinding Minimum}"
+                               Orientation="{TemplateBinding Orientation}"
+                               Value="{TemplateBinding Value}"
+                               ViewportSize="{TemplateBinding ViewportSize}">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton x:Name="DecreasePageButton"
+                                              Command="{x:Static ScrollBar.PageUpCommand}"
+                                              CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                              Style="{StaticResource JadeScrollBarPageButton}"/>
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource JadeScrollBarThumb}"/>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton x:Name="IncreasePageButton"
+                                              Command="{x:Static ScrollBar.PageDownCommand}"
+                                              CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                              Style="{StaticResource JadeScrollBarPageButton}"/>
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter Property="Width" Value="Auto"/>
+                            <Setter Property="Height" Value="10"/>
+                            <Setter TargetName="PART_Track"
+                                    Property="IsDirectionReversed"
+                                    Value="False"/>
+                            <Setter TargetName="DecreasePageButton"
+                                    Property="Command"
+                                    Value="{x:Static ScrollBar.PageLeftCommand}"/>
+                            <Setter TargetName="IncreasePageButton"
+                                    Property="Command"
+                                    Value="{x:Static ScrollBar.PageRightCommand}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="ScrollRoot"
+                                    Property="Opacity"
+                                    Value="0.68"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 </ResourceDictionary>
