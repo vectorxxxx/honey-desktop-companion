@@ -65,8 +65,9 @@ public sealed class SpiderHitMap
             return false;
         }
 
-        if (ContainsEllipse(_pose.Abdomen, x, y, _grabPadding)
-            || ContainsEllipse(_pose.Head, x, y, 0))
+        var point = new SkiaSharp.SKPoint(x, y);
+        if (_pose.Abdomen.Contains(point, _grabPadding)
+            || _pose.Head.Contains(point))
         {
             return true;
         }
@@ -76,19 +77,6 @@ public sealed class SpiderHitMap
                 <= Math.Max(leg.Width / 2, _grabPadding)
             || DistanceToSegment(x, y, leg.Knee.X, leg.Knee.Y, leg.Tip.X, leg.Tip.Y)
                 <= Math.Max(leg.Width / 2, _grabPadding));
-    }
-
-    private static bool ContainsEllipse(
-        SkiaSharp.SKRect rectangle,
-        float x,
-        float y,
-        float padding)
-    {
-        var radiusX = rectangle.Width / 2 + padding;
-        var radiusY = rectangle.Height / 2 + padding;
-        var normalizedX = (x - rectangle.MidX) / radiusX;
-        var normalizedY = (y - rectangle.MidY) / radiusY;
-        return normalizedX * normalizedX + normalizedY * normalizedY <= 1;
     }
 
     private static float DistanceToSegment(

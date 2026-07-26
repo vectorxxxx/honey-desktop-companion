@@ -8,8 +8,8 @@ public sealed record SpiderPose(
     float ViewportHeight,
     float DeviceScale,
     SKPoint Center,
-    SKRect Abdomen,
-    SKRect Head,
+    OrientedEllipse Abdomen,
+    OrientedEllipse Head,
     IReadOnlyList<SpiderLeg> Legs,
     SKRect ContentBounds);
 
@@ -64,8 +64,8 @@ public static class SpiderGeometry
                 Tip = Rotate(leg.Tip, layout.Center, rotation)
             };
         }
-        var abdomen = RotateRectCenter(layout.Abdomen, layout.Center, rotation);
-        var head = RotateRectCenter(layout.Head, layout.Center, rotation);
+        var abdomen = CreateBodyPart(layout.Abdomen, layout.Center, rotation);
+        var head = CreateBodyPart(layout.Head, layout.Center, rotation);
         return new SpiderPose(
             width,
             height,
@@ -88,28 +88,31 @@ public static class SpiderGeometry
             center.Y + x * sine + y * cosine);
     }
 
-    private static SKRect RotateRectCenter(SKRect rectangle, SKPoint center, float angle)
+    private static OrientedEllipse CreateBodyPart(
+        SKRect rectangle,
+        SKPoint center,
+        float rotation)
     {
         var rotatedCenter = Rotate(
             new SKPoint(rectangle.MidX, rectangle.MidY),
             center,
-            angle);
-        return SKRect.Create(
-            rotatedCenter.X - rectangle.Width / 2,
-            rotatedCenter.Y - rectangle.Height / 2,
-            rectangle.Width,
-            rectangle.Height);
+            rotation);
+        return new OrientedEllipse(
+            rotatedCenter,
+            rectangle.Width / 2,
+            rectangle.Height / 2,
+            rotation);
     }
 
     private static SKRect CalculateContentBounds(
-        SKRect abdomen,
-        SKRect head,
+        OrientedEllipse abdomen,
+        OrientedEllipse head,
         IReadOnlyList<SpiderLeg> legs)
     {
-        var left = Math.Min(abdomen.Left, head.Left);
-        var top = Math.Min(abdomen.Top, head.Top);
-        var right = Math.Max(abdomen.Right, head.Right);
-        var bottom = Math.Max(abdomen.Bottom, head.Bottom);
+        var left = Math.Min(abdomen.Bounds.Left, head.Bounds.Left);
+        var top = Math.Min(abdomen.Bounds.Top, head.Bounds.Top);
+        var right = Math.Max(abdomen.Bounds.Right, head.Bounds.Right);
+        var bottom = Math.Max(abdomen.Bounds.Bottom, head.Bounds.Bottom);
         foreach (var leg in legs)
         {
             var radius = leg.Width * 1.18f / 2;

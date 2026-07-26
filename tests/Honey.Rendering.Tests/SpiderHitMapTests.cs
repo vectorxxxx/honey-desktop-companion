@@ -129,6 +129,36 @@ public sealed class SpiderHitMapTests
         }
     }
 
+    [Fact]
+    public void CreateForSnapshot_斜向身体只命中旋转后的真实椭圆()
+    {
+        var abdomen = new OrientedEllipse(
+            new SkiaSharp.SKPoint(130, 130),
+            50,
+            20,
+            MathF.PI / 4);
+        var head = new OrientedEllipse(
+            new SkiaSharp.SKPoint(85, 85),
+            12,
+            10,
+            MathF.PI / 4);
+        var pose = new SpiderPose(
+            260,
+            260,
+            1,
+            new SkiaSharp.SKPoint(130, 130),
+            abdomen,
+            head,
+            [],
+            abdomen.Bounds);
+        var hitMap = SpiderHitMap.Create(pose);
+
+        Assert.True(hitMap.Contains(pose.Abdomen.Center.X, pose.Abdomen.Center.Y));
+        Assert.False(hitMap.Contains(
+            pose.Abdomen.Bounds.Right + 8,
+            pose.Abdomen.Bounds.Top - 8));
+    }
+
     private static RenderSnapshot Snapshot(PetMood mood, double time) =>
         new(PetMode.Normal, mood, 0, 0, time, 1, "observe");
 }
