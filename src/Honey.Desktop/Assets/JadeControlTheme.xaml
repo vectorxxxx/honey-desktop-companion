@@ -11,6 +11,7 @@
     <SolidColorBrush x:Key="JadeSelectionBrush" Color="#1D4943"/>
     <SolidColorBrush x:Key="JadeDisabledBrush" Color="#526763"/>
     <SolidColorBrush x:Key="JadeErrorBrush" Color="#FF8C86"/>
+    <SolidColorBrush x:Key="JadePrimaryActionBrush" Color="#2F6D64"/>
     <SolidColorBrush x:Key="JadeTransparentBrush" Color="Transparent"/>
 
     <Style x:Key="JadeComboBoxToggleButton"
@@ -659,6 +660,11 @@
                                     Property="Background"
                                     Value="{StaticResource JadeSurfaceBrush}"/>
                         </Trigger>
+                        <Trigger Property="Validation.HasError" Value="True">
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeErrorBrush}"/>
+                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="InputBorder"
                                     Property="Background"
@@ -715,6 +721,11 @@
                             <Setter TargetName="InputBorder"
                                     Property="BorderThickness"
                                     Value="2"/>
+                        </Trigger>
+                        <Trigger Property="Validation.HasError" Value="True">
+                            <Setter TargetName="InputBorder"
+                                    Property="BorderBrush"
+                                    Value="{StaticResource JadeErrorBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="InputBorder"

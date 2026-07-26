@@ -245,6 +245,7 @@ public sealed class JadeFormControlThemeTests
             "BorderBrush",
             "{StaticResource JadeAccentStrongBrush}");
         AssertSetter(focus, "InputBorder", "BorderThickness", "2");
+        AssertValidationErrorState(template);
 
         var readOnly = GetTemplateTrigger(template, "IsReadOnly", "True");
         AssertSetter(
@@ -295,6 +296,7 @@ public sealed class JadeFormControlThemeTests
             "BorderBrush",
             "{StaticResource JadeAccentStrongBrush}");
         AssertSetter(focus, "InputBorder", "BorderThickness", "2");
+        AssertValidationErrorState(template);
         AssertInputDisabledState(template);
     }
 
@@ -368,19 +370,24 @@ public sealed class JadeFormControlThemeTests
         Assert.Equal(
             "{StaticResource {x:Type Button}}",
             GetAttribute(actionButton, "BasedOn"));
-        Assert.Equal(
-            [
-                "Height",
-                "Padding",
-                "Margin",
-                "Foreground",
-                "Background",
-                "BorderBrush",
-                "Cursor",
-            ],
-            actionButton
-                .Elements(Presentation + "Setter")
-                .Select(setter => GetAttribute(setter, "Property")));
+        AssertStyleSetter(actionButton, "Height", "38");
+        AssertStyleSetter(actionButton, "Padding", "18,0");
+        AssertStyleSetter(actionButton, "Margin", "8,0,0,0");
+        AssertStyleSetter(actionButton, "Cursor", "Hand");
+        string[] inheritedThemeProperties =
+        [
+            "Foreground",
+            "Background",
+            "BorderBrush",
+        ];
+        Assert.All(
+            inheritedThemeProperties,
+            property => Assert.DoesNotContain(
+                actionButton.Elements(Presentation + "Setter"),
+                setter => string.Equals(
+                    (string?)setter.Attribute("Property"),
+                    property,
+                    StringComparison.Ordinal)));
         Assert.Contains(
             settings.Descendants(Presentation + "Button"),
             button =>
@@ -390,7 +397,7 @@ public sealed class JadeFormControlThemeTests
                     StringComparison.Ordinal) &&
                 string.Equals(
                     (string?)button.Attribute("Background"),
-                    "#2F6D64",
+                    "{StaticResource JadePrimaryActionBrush}",
                     StringComparison.Ordinal));
     }
 
@@ -444,5 +451,18 @@ public sealed class JadeFormControlThemeTests
             "BorderBrush",
             "{StaticResource JadeDisabledBrush}");
         AssertSetter(disabled, "InputRoot", "Opacity", "0.68");
+    }
+
+    private static void AssertValidationErrorState(XElement template)
+    {
+        var validationError = GetTemplateTrigger(
+            template,
+            "Validation.HasError",
+            "True");
+        AssertSetter(
+            validationError,
+            "InputBorder",
+            "BorderBrush",
+            "{StaticResource JadeErrorBrush}");
     }
 }

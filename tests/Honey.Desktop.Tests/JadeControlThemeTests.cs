@@ -27,6 +27,7 @@ public sealed class JadeControlThemeTests
             "JadeSelectionBrush",
             "JadeDisabledBrush",
             "JadeErrorBrush",
+            "JadePrimaryActionBrush",
             "JadeTransparentBrush",
         ];
 

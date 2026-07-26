@@ -27,9 +27,6 @@
                 <Setter Property="Height" Value="38"/>
                 <Setter Property="Padding" Value="18,0"/>
                 <Setter Property="Margin" Value="8,0,0,0"/>
-                <Setter Property="Foreground" Value="#E7FFF8"/>
-                <Setter Property="Background" Value="#234B47"/>
-                <Setter Property="BorderBrush" Value="#6AA79C"/>
                 <Setter Property="Cursor" Value="Hand"/>
             </Style>
         </ResourceDictionary>
@@ -161,7 +158,8 @@
                     </Button>
                     <Button Style="{StaticResource ActionButton}" Click="OnCancelClick"
                             AutomationProperties.Name="取消设置" Content="取消"/>
-                    <Button Style="{StaticResource ActionButton}" Background="#2F6D64" Click="OnSaveClick"
+                    <Button Style="{StaticResource ActionButton}"
+                            Background="{StaticResource JadePrimaryActionBrush}" Click="OnSaveClick"
                             IsDefault="True" AutomationProperties.Name="保存设置">
                         <StackPanel Orientation="Horizontal">
                             <Path Data="{StaticResource IconSave}" Stroke="#E7FFF8" StrokeThickness="2"
