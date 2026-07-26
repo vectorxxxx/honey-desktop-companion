@@ -132,6 +132,69 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
+    public void Draw_三档尺寸在十六量化方向均保留完整透明边带()
+    {
+        var bodyColor = new SKColor(18, 236, 72, 255);
+        using var atlas = new ContrastingBodyAtlas(bodyColor);
+        using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
+
+        foreach (var petPixels in new[] { 60, 140, 240 })
+        {
+            var scale =
+                petPixels / SpiderDetailLevelSelector.ReferencePetPixels;
+            var viewport = SpiderViewportMetrics.ForScale(scale);
+            var viewportWidth = (int)MathF.Ceiling(viewport.Width);
+            var viewportHeight = (int)MathF.Ceiling(viewport.Height);
+            var directionSelector = new SpiderDirectionSelector(
+                hysteresisDegrees: 0);
+            for (var directionIndex = 0;
+                directionIndex < SpiderDirection.Count;
+                directionIndex++)
+            {
+                var angle =
+                    directionIndex * MathF.Tau / SpiderDirection.Count;
+                var snapshot = Snapshot(PetMode.Normal) with
+                {
+                    Scale = scale,
+                    FacingX = MathF.Sin(angle),
+                    FacingY = -MathF.Cos(angle)
+                };
+                Assert.Equal(
+                    directionIndex,
+                    directionSelector.Select(
+                        snapshot.FacingX,
+                        snapshot.FacingY).Index);
+                var pose = SpiderGeometry.CreatePose(
+                    viewportWidth,
+                    viewportHeight,
+                    snapshot);
+                using var bitmap = Render(
+                    scene,
+                    snapshot,
+                    viewportWidth,
+                    viewportHeight);
+                var context =
+                    $"{petPixels}px 量化方向{directionIndex}";
+
+                AssertTransparentBorder(bitmap, 2, context);
+                AssertPoseInsideSafeViewport(
+                    pose,
+                    viewportWidth,
+                    viewportHeight,
+                    2,
+                    context);
+                Assert.Equal(
+                    16,
+                    CountOuterSegmentsInsideViewport(
+                        pose,
+                        viewportWidth,
+                        viewportHeight,
+                        2));
+            }
+        }
+    }
+
+    [Fact]
     public void Draw_相同快照产生确定输出而时间变化会改变步态()
     {
         using var scene = new WhiteJadeSpiderScene();
@@ -642,15 +705,18 @@ public sealed class WhiteJadeSpiderSceneTests
     {
         var centerX = (int)MathF.Round(center.X);
         var centerY = (int)MathF.Round(center.Y);
+        if (centerX - radius < 0
+            || centerY - radius < 0
+            || centerX + radius >= bitmap.Width
+            || centerY + radius >= bitmap.Height)
+        {
+            return false;
+        }
+
         for (var y = centerY - radius; y <= centerY + radius; y++)
         {
             for (var x = centerX - radius; x <= centerX + radius; x++)
             {
-                if (x < 0 || y < 0 || x >= bitmap.Width || y >= bitmap.Height)
-                {
-                    continue;
-                }
-
                 if (bitmap.GetPixel(x, y).Alpha > 16)
                 {
                     return false;
@@ -660,6 +726,130 @@ public sealed class WhiteJadeSpiderSceneTests
 
         return true;
     }
+
+    private static void AssertTransparentBorder(
+        SKBitmap bitmap,
+        int thickness,
+        string context)
+    {
+        Assert.InRange(thickness, 1, Math.Min(bitmap.Width, bitmap.Height) / 2);
+        for (var y = 0; y < bitmap.Height; y++)
+        {
+            for (var offset = 0; offset < thickness; offset++)
+            {
+                AssertBorderPixel(bitmap, offset, y, context);
+                AssertBorderPixel(
+                    bitmap,
+                    bitmap.Width - 1 - offset,
+                    y,
+                    context);
+            }
+        }
+
+        for (var x = 0; x < bitmap.Width; x++)
+        {
+            for (var offset = 0; offset < thickness; offset++)
+            {
+                AssertBorderPixel(bitmap, x, offset, context);
+                AssertBorderPixel(
+                    bitmap,
+                    x,
+                    bitmap.Height - 1 - offset,
+                    context);
+            }
+        }
+    }
+
+    private static void AssertBorderPixel(
+        SKBitmap bitmap,
+        int x,
+        int y,
+        string context) =>
+        Assert.True(
+            bitmap.GetPixel(x, y).Alpha <= 8,
+            $"{context} 在边带 ({x},{y}) 出现不透明像素。");
+
+    private static void AssertPoseInsideSafeViewport(
+        SpiderPose pose,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding,
+        string context) =>
+        Assert.True(
+            pose.ContentBounds.Left >= safePadding
+                && pose.ContentBounds.Top >= safePadding
+                && pose.ContentBounds.Right <= viewportWidth - safePadding
+                && pose.ContentBounds.Bottom <= viewportHeight - safePadding,
+            $"{context} 的姿态范围 {pose.ContentBounds} 未留出 {safePadding}px 安全边带。");
+
+    private static int CountOuterSegmentsInsideViewport(
+        SpiderPose pose,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding)
+    {
+        var count = 0;
+        foreach (var leg in pose.Legs)
+        {
+            count += IsSegmentInsideViewport(
+                SpiderLimbGeometry.Create(
+                    leg.Hip,
+                    leg.Knee,
+                    leg.Width * 0.76f,
+                    leg.Width * 0.52f),
+                viewportWidth,
+                viewportHeight,
+                safePadding) ? 1 : 0;
+            count += IsSegmentInsideViewport(
+                SpiderLimbGeometry.Create(
+                    leg.Knee,
+                    leg.Tip,
+                    leg.Width * 0.52f,
+                    leg.Width * 0.20f),
+                viewportWidth,
+                viewportHeight,
+                safePadding) ? 1 : 0;
+        }
+
+        return count;
+    }
+
+    private static bool IsSegmentInsideViewport(
+        SpiderLimbSegment segment,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding) =>
+        segment.IsValid
+        && IsPointInsideViewport(
+            segment.StartSideA,
+            viewportWidth,
+            viewportHeight,
+            safePadding)
+        && IsPointInsideViewport(
+            segment.StartSideB,
+            viewportWidth,
+            viewportHeight,
+            safePadding)
+        && IsPointInsideViewport(
+            segment.EndSideA,
+            viewportWidth,
+            viewportHeight,
+            safePadding)
+        && IsPointInsideViewport(
+            segment.EndSideB,
+            viewportWidth,
+            viewportHeight,
+            safePadding);
+
+    private static bool IsPointInsideViewport(
+        SKPoint point,
+        int viewportWidth,
+        int viewportHeight,
+        float safePadding) =>
+        point.X >= safePadding
+        && point.Y >= safePadding
+        && point.X <= viewportWidth - safePadding
+        && point.Y <= viewportHeight - safePadding;
 
     private static SKPoint Lerp(SKPoint start, SKPoint end, float amount) =>
         new(
