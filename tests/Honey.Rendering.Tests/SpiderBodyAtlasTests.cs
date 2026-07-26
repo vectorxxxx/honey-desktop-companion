@@ -69,10 +69,10 @@ public sealed class SpiderBodyAtlasTests
 
         Assert.True(ownedAtlas.TryGetFrame(
             PetMode.Normal,
-            new SpiderDirection(15, 0),
-            out var last));
-        Assert.Equal(66, last.Source.Right);
-        Assert.Equal(66, last.Source.Bottom);
+            new SpiderDirection(0, 0),
+            out var bottomRowFrame));
+        Assert.Equal(66, bottomRowFrame.Source.Bottom);
+        Assert.InRange(bottomRowFrame.Source.Height, 16, 17);
     }
 
     [Fact]
@@ -92,6 +92,29 @@ public sealed class SpiderBodyAtlasTests
                 Assert.True(frame.Source.Height >= 313);
             }
         }
+    }
+
+    [Fact]
+    public void 默认素材会把逻辑朝向映射到生成图的半转台并镜像左侧()
+    {
+        using var atlas = EmbeddedSpiderBodyAtlas.LoadDefault();
+        Assert.True(atlas.TryGetFrame(
+            PetMode.Normal,
+            new SpiderDirection(0, 0),
+            out var up));
+        Assert.True(atlas.TryGetFrame(
+            PetMode.Normal,
+            new SpiderDirection(4, MathF.PI / 2),
+            out var right));
+        Assert.True(atlas.TryGetFrame(
+            PetMode.Normal,
+            new SpiderDirection(12, MathF.PI * 1.5f),
+            out var left));
+
+        Assert.True(up.Source.Top > right.Source.Top);
+        Assert.False(right.FlipX);
+        Assert.True(left.FlipX);
+        Assert.Equal(right.Source, left.Source);
     }
 
     private static MemoryStream CreateAtlasStream() => CreatePngStream(64, 64);

@@ -8,6 +8,9 @@ namespace Honey.Rendering.Spider;
 public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
 {
     private readonly WebScene _webScene = new();
+    private readonly ISpiderBodyAtlas? _atlas;
+    private readonly bool _ownsAtlas;
+    private readonly SpiderDirectionSelector _directionSelector = new();
     private readonly SKPaint _particlePaint = new() { IsAntialias = true };
     private readonly SKPaint _legShadowPaint = new()
     {
@@ -17,6 +20,13 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         StrokeJoin = SKStrokeJoin.Round
     };
     private readonly SKPaint _legJadePaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeCap = SKStrokeCap.Round,
+        StrokeJoin = SKStrokeJoin.Round
+    };
+    private readonly SKPaint _legHighlightPaint = new()
     {
         IsAntialias = true,
         Style = SKPaintStyle.Stroke,
@@ -45,6 +55,26 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         StrokeJoin = SKStrokeJoin.Round
     };
     private int _disposed;
+
+    public WhiteJadeSpiderScene()
+    {
+        if (EmbeddedSpiderBodyAtlas.TryLoadDefault(out var atlas))
+        {
+            _atlas = atlas;
+            _ownsAtlas = true;
+        }
+    }
+
+    public WhiteJadeSpiderScene(ISpiderBodyAtlas atlas)
+        : this(atlas, ownsAtlas: true)
+    {
+    }
+
+    public WhiteJadeSpiderScene(ISpiderBodyAtlas atlas, bool ownsAtlas)
+    {
+        _atlas = atlas ?? throw new ArgumentNullException(nameof(atlas));
+        _ownsAtlas = ownsAtlas;
+    }
 
     public void Draw(SKCanvas canvas, RenderSnapshot snapshot)
     {
@@ -93,7 +123,9 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             bounds.Height,
             safe,
             deviceScale);
-        DrawPose(canvas, safe, pose, bounds, offsetX, offsetY);
+        var detailLevel = SpiderDetailLevelSelector.Select(
+            MathF.Min(bounds.Width, bounds.Height) * safe.Scale);
+        DrawPose(canvas, safe, pose, bounds, detailLevel, offsetX, offsetY);
     }
 
     public void Draw(SKCanvas canvas, RenderSnapshot snapshot, SpiderPose pose)
@@ -104,7 +136,9 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         ArgumentNullException.ThrowIfNull(pose);
         var safe = snapshot.Normalize();
         var bounds = new SKRect(0, 0, pose.ViewportWidth, pose.ViewportHeight);
-        DrawPose(canvas, safe, pose, bounds, 0, 0);
+        var detailLevel = SpiderDetailLevelSelector.Select(
+            MathF.Min(bounds.Width, bounds.Height) * safe.Scale);
+        DrawPose(canvas, safe, pose, bounds, detailLevel, 0, 0);
     }
 
     private void DrawPose(
@@ -112,18 +146,42 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         RenderSnapshot safe,
         SpiderPose pose,
         SKRect bounds,
+        SpiderDetailLevel detailLevel,
         float offsetX,
         float offsetY)
     {
         canvas.Save();
         canvas.Translate(offsetX, offsetY);
         DrawSkillProps(canvas, pose, safe);
-        DrawParticles(canvas, pose, safe);
+        if (detailLevel >= SpiderDetailLevel.Standard)
+        {
+            DrawParticles(canvas, pose, safe, detailLevel);
+        }
         _webScene.Draw(canvas, new SKRect(0, 0, bounds.Width, bounds.Height), safe);
-        DrawLegs(canvas, pose, safe);
-        DrawBody(canvas, pose, safe);
-        DrawMouthparts(canvas, pose, safe);
-        DrawEyes(canvas, pose, safe);
+        DrawLegs(canvas, pose, safe, detailLevel, drawFront: false);
+        var direction = _directionSelector.Select(safe.FacingX, safe.FacingY);
+        var atlasDrawn = false;
+        if (_atlas is not null
+            && _atlas.TryGetFrame(safe.Mode, direction, out var frame))
+        {
+            DrawAtlasBody(canvas, pose, frame, safe, detailLevel);
+            atlasDrawn = true;
+        }
+        else
+        {
+            DrawProceduralBody(canvas, pose, safe);
+        }
+
+        DrawLegs(canvas, pose, safe, detailLevel, drawFront: true);
+        if (!atlasDrawn)
+        {
+            DrawMouthparts(canvas, pose, safe);
+            DrawEyes(canvas, pose, safe);
+        }
+        else if (detailLevel == SpiderDetailLevel.Showcase)
+        {
+            DrawShowcaseAccents(canvas, pose, safe);
+        }
         canvas.Restore();
     }
 
@@ -294,12 +352,17 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         canvas.DrawCircle(x, y, 2.2f * scale, _skillPaint);
     }
 
-    private void DrawParticles(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
+    private void DrawParticles(
+        SKCanvas canvas,
+        SpiderPose pose,
+        RenderSnapshot snapshot,
+        SpiderDetailLevel detailLevel)
     {
         var berserk = snapshot.Mode == PetMode.Berserk;
         var baseColor = SpiderMaterialPalette.For(snapshot.Mode).Particle;
         var span = pose.Abdomen.Height * 1.1f;
-        for (var index = 0; index < 14; index++)
+        var particleCount = detailLevel == SpiderDetailLevel.Showcase ? 14 : 7;
+        for (var index = 0; index < particleCount; index++)
         {
             var seed = index * 12.9898;
             var phase = snapshot.AnimationTime * (berserk ? 1.9 : 0.65) + seed;
@@ -316,30 +379,159 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         }
     }
 
-    private void DrawLegs(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
+    private void DrawLegs(
+        SKCanvas canvas,
+        SpiderPose pose,
+        RenderSnapshot snapshot,
+        SpiderDetailLevel detailLevel,
+        bool drawFront)
     {
         var palette = SpiderMaterialPalette.For(snapshot.Mode);
         _legShadowPaint.Color = palette.LegShadow;
         _legJadePaint.Color = palette.LegSurface;
+        _legHighlightPaint.Color = palette.BodyHighlight.WithAlpha(190);
+        var forward = UnitForward(snapshot);
 
         foreach (var leg in pose.Legs)
         {
-            _legShadowPaint.StrokeWidth = leg.Width * 1.24f;
-            _legJadePaint.StrokeWidth = leg.Width * 0.66f;
-            canvas.DrawLine(leg.Root, leg.Knee, _legShadowPaint);
-            canvas.DrawLine(leg.Knee, leg.Tip, _legShadowPaint);
-            canvas.DrawLine(leg.Root, leg.Knee, _legJadePaint);
-            canvas.DrawLine(leg.Knee, leg.Tip, _legJadePaint);
-            canvas.DrawCircle(leg.Knee, leg.Width * 0.38f, _legJadePaint);
+            var rootDelta = leg.Root - pose.Center;
+            var isFront = rootDelta.X * forward.X + rootDelta.Y * forward.Y > 0;
+            if (isFront != drawFront)
+            {
+                continue;
+            }
+
+            DrawLegSegment(
+                canvas,
+                leg.Root,
+                leg.Knee,
+                leg.Width * 1.16f,
+                detailLevel);
+            DrawLegSegment(
+                canvas,
+                leg.Knee,
+                leg.Tip,
+                leg.Width * 0.82f,
+                detailLevel);
+            if (detailLevel >= SpiderDetailLevel.Standard)
+            {
+                DrawJointCap(canvas, leg.Knee, leg.Width, palette);
+            }
         }
     }
 
-    private void DrawBody(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
+    private void DrawLegSegment(
+        SKCanvas canvas,
+        SKPoint start,
+        SKPoint end,
+        float width,
+        SpiderDetailLevel detailLevel)
+    {
+        _legShadowPaint.StrokeWidth = width * 1.28f;
+        _legJadePaint.StrokeWidth = width * 0.76f;
+        _legHighlightPaint.StrokeWidth = Math.Max(0.8f, width * 0.17f);
+        canvas.DrawLine(start, end, _legShadowPaint);
+        canvas.DrawLine(start, end, _legJadePaint);
+        if (detailLevel >= SpiderDetailLevel.Standard)
+        {
+            canvas.DrawLine(start, end, _legHighlightPaint);
+        }
+    }
+
+    private void DrawJointCap(
+        SKCanvas canvas,
+        SKPoint center,
+        float width,
+        SpiderMaterialPalette palette)
+    {
+        using var shader = SKShader.CreateRadialGradient(
+            new SKPoint(center.X - width * 0.14f, center.Y - width * 0.18f),
+            width * 0.58f,
+            [palette.BodyHighlight, palette.LegSurface, palette.LegShadow],
+            [0, 0.55f, 1],
+            SKShaderTileMode.Clamp);
+        _bodyPaint.Shader = shader;
+        canvas.DrawOval(
+            SKRect.Create(
+                center.X - width * 0.48f,
+                center.Y - width * 0.40f,
+                width * 0.96f,
+                width * 0.80f),
+            _bodyPaint);
+        _bodyPaint.Shader = null;
+    }
+
+    private void DrawAtlasBody(
+        SKCanvas canvas,
+        SpiderPose pose,
+        SpiderAtlasFrame frame,
+        RenderSnapshot snapshot,
+        SpiderDetailLevel detailLevel)
+    {
+        var bodySpan = MathF.Max(
+            pose.Abdomen.Width * 1.42f,
+            Distance(pose.Abdomen.Center, pose.Head.Center)
+                + pose.Abdomen.RadiusY
+                + pose.Head.RadiusY);
+        var side = MathF.Min(
+            MathF.Min(pose.ContentBounds.Width, pose.ContentBounds.Height) * 0.98f,
+            bodySpan * 1.70f);
+        var destination = SKRect.Create(
+            pose.Center.X - side * frame.NormalizedAnchor.X,
+            pose.Center.Y - side * frame.NormalizedAnchor.Y,
+            side,
+            side);
+        var source = new SKRect(
+            frame.Source.Left,
+            frame.Source.Top,
+            frame.Source.Right,
+            frame.Source.Bottom);
+        var sampling = new SKSamplingOptions(
+            SKFilterMode.Linear,
+            SKMipmapMode.Linear);
+        canvas.Save();
+        if (frame.FlipX)
+        {
+            canvas.Scale(-1, 1, destination.MidX, destination.MidY);
+        }
+
+        canvas.DrawBitmap(frame.Bitmap, source, destination, sampling, null);
+        canvas.Restore();
+
+        if (snapshot.Mode == PetMode.Berserk
+            && detailLevel >= SpiderDetailLevel.Standard)
+        {
+            var pulse = 0.45f
+                + 0.35f * MathF.Sin((float)(snapshot.AnimationTime * 4.2));
+            _glowPaint.Color = new SKColor(
+                255,
+                34,
+                26,
+                (byte)(36 + pulse * 44));
+            canvas.DrawOval(pose.Abdomen.Bounds, _glowPaint);
+        }
+    }
+
+    private void DrawShowcaseAccents(
+        SKCanvas canvas,
+        SpiderPose pose,
+        RenderSnapshot snapshot)
+    {
+        var palette = SpiderMaterialPalette.For(snapshot.Mode);
+        _facetPaint.Color = palette.BodyHighlight.WithAlpha(115);
+        _facetPaint.StrokeWidth = Math.Max(1, pose.DeviceScale * 1.2f);
+        canvas.DrawArc(pose.Abdomen.Bounds, 205, 54, false, _facetPaint);
+    }
+
+    private void DrawProceduralBody(
+        SKCanvas canvas,
+        SpiderPose pose,
+        RenderSnapshot snapshot)
     {
         var berserk = snapshot.Mode == PetMode.Berserk;
         var palette = SpiderMaterialPalette.For(snapshot.Mode);
         var pulse = 0.5f + 0.5f * MathF.Sin((float)(snapshot.AnimationTime * 4.2));
-        DrawJadeEllipse(
+        DrawOrientedJadeEllipse(
             canvas,
             pose.Abdomen,
             palette.BodyEdge,
@@ -351,21 +543,30 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
                     palette.BodyMiddle.Alpha)
                 : palette.BodyMiddle,
             palette.BodyHighlight);
-        DrawJadeEllipse(
+        DrawOrientedJadeEllipse(
             canvas,
             pose.Head,
             palette.BodyEdge,
             palette.BodyMiddle,
             palette.BodyHighlight);
 
+        canvas.Save();
+        canvas.RotateRadians(
+            pose.Abdomen.RotationRadians,
+            pose.Abdomen.Center.X,
+            pose.Abdomen.Center.Y);
+        var local = LocalBounds(pose.Abdomen);
         _glowPaint.Color = palette.InternalGlow.WithAlpha(
-            (byte)Math.Clamp(palette.InternalGlow.Alpha * (berserk ? 0.65f + pulse * 0.35f : 1), 0, 255));
+            (byte)Math.Clamp(
+                palette.InternalGlow.Alpha * (berserk ? 0.65f + pulse * 0.35f : 1),
+                0,
+                255));
         canvas.DrawOval(
             SKRect.Create(
-                pose.Abdomen.Left + pose.Abdomen.Width * 0.22f,
-                pose.Abdomen.Top + pose.Abdomen.Height * 0.25f,
-                pose.Abdomen.Width * 0.56f,
-                pose.Abdomen.Height * 0.48f),
+                local.Left + local.Width * 0.22f,
+                local.Top + local.Height * 0.25f,
+                local.Width * 0.56f,
+                local.Height * 0.48f),
             _glowPaint);
 
         _veinPaint.StrokeWidth = Math.Max(1, pose.Abdomen.Width * 0.025f);
@@ -373,31 +574,23 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             ? palette.Vein.WithAlpha((byte)(105 + pulse * 85))
             : palette.Vein;
         using var veinBuilder = new SKPathBuilder();
-        veinBuilder.MoveTo(pose.Abdomen.MidX, pose.Abdomen.Top + pose.Abdomen.Height * 0.18f);
+        veinBuilder.MoveTo(local.MidX, local.Top + local.Height * 0.18f);
         veinBuilder.CubicTo(
-            pose.Abdomen.Left + pose.Abdomen.Width * 0.28f,
-            pose.Abdomen.MidY,
-            pose.Abdomen.Right - pose.Abdomen.Width * 0.2f,
-            pose.Abdomen.MidY,
-            pose.Abdomen.MidX,
-            pose.Abdomen.Bottom - pose.Abdomen.Height * 0.15f);
+            local.Left + local.Width * 0.28f,
+            local.MidY,
+            local.Right - local.Width * 0.2f,
+            local.MidY,
+            local.MidX,
+            local.Bottom - local.Height * 0.15f);
         using var veins = veinBuilder.Detach();
         canvas.DrawPath(veins, _veinPaint);
+        canvas.Restore();
     }
 
     private void DrawMouthparts(SKCanvas canvas, SpiderPose pose, RenderSnapshot snapshot)
     {
         var palette = SpiderMaterialPalette.For(snapshot.Mode);
-        var forward = new SKPoint(snapshot.FacingX, snapshot.FacingY);
-        var length = MathF.Sqrt(forward.X * forward.X + forward.Y * forward.Y);
-        if (length < 0.001f)
-        {
-            forward = new SKPoint(0, -1);
-        }
-        else
-        {
-            forward = new SKPoint(forward.X / length, forward.Y / length);
-        }
+        var forward = UnitForward(snapshot);
         var side = new SKPoint(-forward.Y, forward.X);
         var rootDistance = pose.Head.Width * 0.24f;
         var fangLength = pose.Head.Width * 0.23f;
@@ -416,6 +609,27 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             canvas.DrawLine(root, tip, _legShadowPaint);
             canvas.DrawLine(root, tip, _legJadePaint);
         }
+    }
+
+    private void DrawOrientedJadeEllipse(
+        SKCanvas canvas,
+        OrientedEllipse part,
+        SKColor edge,
+        SKColor middle,
+        SKColor highlight)
+    {
+        canvas.Save();
+        canvas.RotateRadians(
+            part.RotationRadians,
+            part.Center.X,
+            part.Center.Y);
+        DrawJadeEllipse(
+            canvas,
+            LocalBounds(part),
+            edge,
+            middle,
+            highlight);
+        canvas.Restore();
     }
 
     private void DrawJadeEllipse(
@@ -468,20 +682,66 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             {
                 for (var side = -1; side <= 1; side += 2)
                 {
-                    var x = pose.Head.MidX + side * unit * (pair == 0 ? 0.14f : 0.31f);
-                    var y = pose.Head.Top + pose.Head.Height * (row == 0 ? 0.42f : 0.67f);
+                    var center = TransformLocal(
+                        pose.Head,
+                        side * unit * (pair == 0 ? 0.14f : 0.31f),
+                        -pose.Head.RadiusY
+                            + pose.Head.Height * (row == 0 ? 0.42f : 0.67f));
+                    var x = center.X;
+                    var y = center.Y;
                     var radius = unit * (pair == 0 ? 0.07f : 0.045f) * (alert ? 1.14f : 1);
-                    canvas.DrawOval(
-                        new SKRect(x - radius, y - radius * (sleepy ? 0.28f : 1), x + radius, y + radius * (sleepy ? 0.28f : 1)),
+                    canvas.Save();
+                    canvas.RotateRadians(pose.Head.RotationRadians, x, y);
+                    canvas.DrawOval(new SKRect(
+                        x - radius,
+                        y - radius * (sleepy ? 0.28f : 1),
+                        x + radius,
+                        y + radius * (sleepy ? 0.28f : 1)),
                         _socketPaint);
                     canvas.DrawCircle(
                         x + gazeX,
                         y + gazeY,
                         radius * (sleepy ? 0.22f : 0.58f),
                         _irisPaint);
+                    canvas.Restore();
                 }
             }
         }
+    }
+
+    private static SKRect LocalBounds(OrientedEllipse part) =>
+        SKRect.Create(
+            part.Center.X - part.RadiusX,
+            part.Center.Y - part.RadiusY,
+            part.Width,
+            part.Height);
+
+    private static SKPoint TransformLocal(
+        OrientedEllipse part,
+        float localX,
+        float localY)
+    {
+        var cosine = MathF.Cos(part.RotationRadians);
+        var sine = MathF.Sin(part.RotationRadians);
+        return new SKPoint(
+            part.Center.X + localX * cosine - localY * sine,
+            part.Center.Y + localX * sine + localY * cosine);
+    }
+
+    private static SKPoint UnitForward(RenderSnapshot snapshot)
+    {
+        var forward = new SKPoint(snapshot.FacingX, snapshot.FacingY);
+        var length = MathF.Sqrt(forward.X * forward.X + forward.Y * forward.Y);
+        return length < 0.001f
+            ? new SKPoint(0, -1)
+            : new SKPoint(forward.X / length, forward.Y / length);
+    }
+
+    private static float Distance(SKPoint left, SKPoint right)
+    {
+        var x = left.X - right.X;
+        var y = left.Y - right.Y;
+        return MathF.Sqrt(x * x + y * y);
     }
 
     public void Dispose()
@@ -495,6 +755,7 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         _particlePaint.Dispose();
         _legShadowPaint.Dispose();
         _legJadePaint.Dispose();
+        _legHighlightPaint.Dispose();
         _veinPaint.Dispose();
         _facetPaint.Dispose();
         _bodyPaint.Dispose();
@@ -502,6 +763,10 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
         _socketPaint.Dispose();
         _irisPaint.Dispose();
         _skillPaint.Dispose();
+        if (_ownsAtlas)
+        {
+            _atlas?.Dispose();
+        }
     }
 
     private void ThrowIfDisposed() =>
