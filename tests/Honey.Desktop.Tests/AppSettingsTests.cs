@@ -5,6 +5,28 @@ namespace Honey.Desktop.Tests;
 public sealed class AppSettingsTests
 {
     [Fact]
+    public void 默认设置_启用自主移动且不允许跨显示器()
+    {
+        var settings = new AppSettings();
+
+        Assert.True(settings.AutonomousMovementEnabled);
+        Assert.False(settings.AllowCrossMonitorRoaming);
+    }
+
+    [Fact]
+    public void Normalize_保留自主移动与跨显示器选项()
+    {
+        var normalized = new AppSettings
+        {
+            AutonomousMovementEnabled = false,
+            AllowCrossMonitorRoaming = true
+        }.Normalize();
+
+        Assert.False(normalized.AutonomousMovementEnabled);
+        Assert.True(normalized.AllowCrossMonitorRoaming);
+    }
+
+    [Fact]
     public void Normalize_限制尺寸并保留默认自启动关闭()
     {
         var normalized = new AppSettings { PetSize = 400 }.Normalize();

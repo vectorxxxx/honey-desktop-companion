@@ -9,6 +9,8 @@ public sealed record AppSettings
     public string ModePreference { get; init; } = "auto";
     public bool StartWithWindows { get; init; }
     public bool FocusMode { get; init; } = true;
+    public bool AutonomousMovementEnabled { get; init; } = true;
+    public bool AllowCrossMonitorRoaming { get; init; }
     public bool AiEnabled { get; init; }
     public string AiEndpoint { get; init; } = "https://api.openai.com/v1";
     public string AiModel { get; init; } = "gpt-5.6-luna";
