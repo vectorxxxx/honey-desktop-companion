@@ -73,10 +73,35 @@ public sealed class SpiderHitMap
         }
 
         return _pose.Legs.Any(leg =>
-            DistanceToSegment(x, y, leg.Root.X, leg.Root.Y, leg.Knee.X, leg.Knee.Y)
-                <= Math.Max(leg.Width / 2, _grabPadding)
-            || DistanceToSegment(x, y, leg.Knee.X, leg.Knee.Y, leg.Tip.X, leg.Tip.Y)
-                <= Math.Max(leg.Width / 2, _grabPadding));
+            ContainsSegment(point, leg.Root, leg.Hip, leg.Width)
+            || ContainsSegment(point, leg.Hip, leg.Knee, leg.Width * 0.76f)
+            || ContainsSegment(point, leg.Knee, leg.Tip, leg.Width * 0.52f));
+    }
+
+    private bool ContainsSegment(
+        SkiaSharp.SKPoint point,
+        SkiaSharp.SKPoint start,
+        SkiaSharp.SKPoint end,
+        float width)
+    {
+        if (!float.IsFinite(start.X)
+            || !float.IsFinite(start.Y)
+            || !float.IsFinite(end.X)
+            || !float.IsFinite(end.Y)
+            || !float.IsFinite(width)
+            || width <= 0)
+        {
+            return false;
+        }
+
+        return DistanceToSegment(
+                point.X,
+                point.Y,
+                start.X,
+                start.Y,
+                end.X,
+                end.Y)
+            <= Math.Max(width / 2, _grabPadding);
     }
 
     private static float DistanceToSegment(

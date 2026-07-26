@@ -109,24 +109,107 @@ public sealed class SpiderHitMapTests
     [InlineData(PetMood.Sleepy, 1.75)]
     [InlineData(PetMood.Alert, 2.25)]
     [InlineData(PetMood.Angry, 2.75)]
-    public void CreateForSnapshot_每条动态腿的两段中点与膝点均可命中(
+    public void CreateForSnapshot_每条动态腿的三段中点与关节均可命中(
         PetMood mood,
         double animationTime)
     {
-        var snapshot = Snapshot(mood, animationTime);
-        var pose = SpiderGeometry.CreatePose(260, 260, snapshot);
-        var hitMap = SpiderHitMap.CreateForSnapshot(260, 260, snapshot);
+        var snapshot = Snapshot(mood, animationTime) with { Scale = 2 };
+        var pose = SpiderGeometry.CreatePose(520, 520, snapshot);
+        var hitMap = SpiderHitMap.CreateForSnapshot(520, 520, snapshot);
 
-        foreach (var leg in pose.Legs)
+        for (var index = 0; index < pose.Legs.Count; index++)
         {
-            Assert.True(hitMap.Contains(leg.Knee.X, leg.Knee.Y));
-            Assert.True(hitMap.Contains(
-                (leg.Root.X + leg.Knee.X) / 2,
-                (leg.Root.Y + leg.Knee.Y) / 2));
-            Assert.True(hitMap.Contains(
-                (leg.Knee.X + leg.Tip.X) / 2,
-                (leg.Knee.Y + leg.Tip.Y) / 2));
+            var leg = pose.Legs[index];
+
+            Assert.True(
+                hitMap.Contains(leg.Hip.X, leg.Hip.Y),
+                $"第 {index} 条腿的髋关节应可命中。");
+            Assert.True(
+                hitMap.Contains(leg.Knee.X, leg.Knee.Y),
+                $"第 {index} 条腿的膝关节应可命中。");
+            Assert.True(
+                hitMap.Contains(
+                    (leg.Root.X + leg.Hip.X) / 2,
+                    (leg.Root.Y + leg.Hip.Y) / 2),
+                $"第 {index} 条腿的根部至髋关节中点应可命中。");
+            Assert.True(
+                hitMap.Contains(
+                    (leg.Hip.X + leg.Knee.X) / 2,
+                    (leg.Hip.Y + leg.Knee.Y) / 2),
+                $"第 {index} 条腿的髋关节至膝关节中点应可命中。");
+            Assert.True(
+                hitMap.Contains(
+                    (leg.Knee.X + leg.Tip.X) / 2,
+                    (leg.Knee.Y + leg.Tip.Y) / 2),
+                $"第 {index} 条腿的膝关节至足尖中点应可命中。");
         }
+    }
+
+    [Fact]
+    public void Create_明显弯折的腿仍命中根部至髋关节中点()
+    {
+        var abdomen = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 240),
+            12,
+            10,
+            0);
+        var head = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 220),
+            8,
+            6,
+            0);
+        var leg = new SpiderLeg(
+            new SkiaSharp.SKPoint(20, 100),
+            new SkiaSharp.SKPoint(20, 20),
+            new SkiaSharp.SKPoint(100, 100),
+            new SkiaSharp.SKPoint(180, 100),
+            4,
+            SpiderLegLayer.BehindBody);
+        var pose = new SpiderPose(
+            260,
+            260,
+            1,
+            new SkiaSharp.SKPoint(240, 240),
+            abdomen,
+            head,
+            [leg],
+            new SkiaSharp.SKRect(18, 18, 252, 252));
+        var hitMap = SpiderHitMap.Create(pose);
+
+        Assert.True(hitMap.Contains(20, 60));
+    }
+
+    [Fact]
+    public void Create_非法腿宽不会让远处透明区域误命中()
+    {
+        var abdomen = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 240),
+            12,
+            10,
+            0);
+        var head = new OrientedEllipse(
+            new SkiaSharp.SKPoint(240, 220),
+            8,
+            6,
+            0);
+        var leg = new SpiderLeg(
+            new SkiaSharp.SKPoint(20, 20),
+            new SkiaSharp.SKPoint(30, 20),
+            new SkiaSharp.SKPoint(40, 20),
+            new SkiaSharp.SKPoint(50, 20),
+            float.PositiveInfinity,
+            SpiderLegLayer.BehindBody);
+        var pose = new SpiderPose(
+            260,
+            260,
+            1,
+            new SkiaSharp.SKPoint(240, 240),
+            abdomen,
+            head,
+            [leg],
+            new SkiaSharp.SKRect(18, 18, 252, 252));
+
+        Assert.False(SpiderHitMap.Create(pose).Contains(180, 180));
     }
 
     [Fact]
