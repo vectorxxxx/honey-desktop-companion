@@ -9,9 +9,11 @@
     <SolidColorBrush x:Key="JadeAccentBrush" Color="#8ED7CA"/>
     <SolidColorBrush x:Key="JadeAccentStrongBrush" Color="#A9F5E7"/>
     <SolidColorBrush x:Key="JadeSelectionBrush" Color="#1D4943"/>
-    <SolidColorBrush x:Key="JadeDisabledBrush" Color="#526763"/>
+    <SolidColorBrush x:Key="JadeDisabledBrush" Color="#78918C"/>
     <SolidColorBrush x:Key="JadeErrorBrush" Color="#FF8C86"/>
     <SolidColorBrush x:Key="JadePrimaryActionBrush" Color="#2F6D64"/>
+    <SolidColorBrush x:Key="JadePrimaryActionHoverBrush" Color="#3A7F74"/>
+    <SolidColorBrush x:Key="JadePrimaryActionPressedBrush" Color="#24564F"/>
     <SolidColorBrush x:Key="JadeTransparentBrush" Color="Transparent"/>
 
     <Style x:Key="JadeComboBoxToggleButton"
@@ -158,7 +160,7 @@
                                     Value="{StaticResource JadeDisabledBrush}"/>
                             <Setter TargetName="ComboRoot"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -214,7 +216,7 @@
                                     Value="{StaticResource JadeDisabledBrush}"/>
                             <Setter TargetName="ItemBorder"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -318,7 +320,7 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="ScrollRoot"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -422,7 +424,7 @@
                                     Value="{StaticResource JadeDisabledBrush}"/>
                             <Setter TargetName="CheckRoot"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -605,7 +607,7 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="SliderRoot"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -674,7 +676,7 @@
                                     Value="{StaticResource JadeDisabledBrush}"/>
                             <Setter TargetName="InputRoot"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -736,7 +738,7 @@
                                     Value="{StaticResource JadeDisabledBrush}"/>
                             <Setter TargetName="InputRoot"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -812,6 +814,24 @@
                                     Property="BorderThickness"
                                     Value="2"/>
                         </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsDefaulted" Value="True"/>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="ButtonBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadePrimaryActionHoverBrush}"/>
+                        </MultiTrigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsDefaulted" Value="True"/>
+                                <Condition Property="IsPressed" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="ButtonBorder"
+                                    Property="Background"
+                                    Value="{StaticResource JadePrimaryActionPressedBrush}"/>
+                        </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground"
                                     Value="{StaticResource JadeMutedTextBrush}"/>
@@ -820,7 +840,7 @@
                                     Value="{StaticResource JadeDisabledBrush}"/>
                             <Setter TargetName="ButtonRoot"
                                     Property="Opacity"
-                                    Value="0.68"/>
+                                    Value="0.84"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

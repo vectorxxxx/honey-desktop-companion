@@ -94,7 +94,7 @@ public sealed class JadeSelectionControlThemeTests
             "ComboBorder",
             "BorderBrush",
             "{StaticResource JadeDisabledBrush}");
-        AssertSetter(disabledTrigger, "ComboRoot", "Opacity", "0.68");
+        AssertSetter(disabledTrigger, "ComboRoot", "Opacity", "0.84");
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class JadeSelectionControlThemeTests
             null,
             "Foreground",
             "{StaticResource JadeDisabledBrush}");
-        AssertSetter(triggers[3], "ItemBorder", "Opacity", "0.68");
+        AssertSetter(triggers[3], "ItemBorder", "Opacity", "0.84");
     }
 
     [Fact]

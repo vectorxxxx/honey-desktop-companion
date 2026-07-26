@@ -73,7 +73,7 @@ public sealed class JadeFormControlThemeTests
             "{StaticResource JadeAccentBrush}");
 
         var disabled = GetTemplateTrigger(template, "IsEnabled", "False");
-        AssertSetter(disabled, "CheckRoot", "Opacity", "0.68");
+        AssertSetter(disabled, "CheckRoot", "Opacity", "0.84");
         AssertSetter(
             disabled,
             null,
@@ -210,7 +210,7 @@ public sealed class JadeFormControlThemeTests
         var focus = GetTemplateTrigger(template, "IsKeyboardFocused", "True");
         AssertSetter(focus, "SliderThumb", "BorderBrush", "#4D8ED7CA");
         var disabled = GetTemplateTrigger(template, "IsEnabled", "False");
-        AssertSetter(disabled, "SliderRoot", "Opacity", "0.68");
+        AssertSetter(disabled, "SliderRoot", "Opacity", "0.84");
     }
 
     [Fact]
@@ -347,6 +347,25 @@ public sealed class JadeFormControlThemeTests
             "{StaticResource JadeAccentStrongBrush}");
         AssertSetter(defaulted, "ButtonBorder", "BorderThickness", "2");
 
+        var primaryHover = GetTemplateMultiTrigger(
+            template,
+            ("IsDefaulted", "True"),
+            ("IsMouseOver", "True"));
+        AssertSetter(
+            primaryHover,
+            "ButtonBorder",
+            "Background",
+            "{StaticResource JadePrimaryActionHoverBrush}");
+        var primaryPressed = GetTemplateMultiTrigger(
+            template,
+            ("IsDefaulted", "True"),
+            ("IsPressed", "True"));
+        AssertSetter(
+            primaryPressed,
+            "ButtonBorder",
+            "Background",
+            "{StaticResource JadePrimaryActionPressedBrush}");
+
         var disabled = GetTemplateTrigger(template, "IsEnabled", "False");
         AssertSetter(
             disabled,
@@ -358,7 +377,7 @@ public sealed class JadeFormControlThemeTests
             null,
             "Foreground",
             "{StaticResource JadeMutedTextBrush}");
-        AssertSetter(disabled, "ButtonRoot", "Opacity", "0.68");
+        AssertSetter(disabled, "ButtonRoot", "Opacity", "0.84");
 
         var settings = LoadFixture("SettingsWindow.xaml");
         var actionButton = settings
@@ -450,7 +469,7 @@ public sealed class JadeFormControlThemeTests
             "InputBorder",
             "BorderBrush",
             "{StaticResource JadeDisabledBrush}");
-        AssertSetter(disabled, "InputRoot", "Opacity", "0.68");
+        AssertSetter(disabled, "InputRoot", "Opacity", "0.84");
     }
 
     private static void AssertValidationErrorState(XElement template)
@@ -464,5 +483,30 @@ public sealed class JadeFormControlThemeTests
             "InputBorder",
             "BorderBrush",
             "{StaticResource JadeErrorBrush}");
+    }
+
+    private static XElement GetTemplateMultiTrigger(
+        XElement template,
+        params (string Property, string Value)[] expectedConditions)
+    {
+        var triggers = Assert.IsType<XElement>(
+            template.Element(Presentation + "ControlTemplate.Triggers"));
+
+        return Assert.Single(
+            triggers.Elements(Presentation + "MultiTrigger"),
+            multiTrigger =>
+            {
+                var conditions = multiTrigger
+                    .Element(Presentation + "MultiTrigger.Conditions")?
+                    .Elements(Presentation + "Condition")
+                    .Select(condition => (
+                        Property: (string?)condition.Attribute("Property"),
+                        Value: (string?)condition.Attribute("Value")))
+                    .ToArray() ?? [];
+
+                return conditions.Length == expectedConditions.Length &&
+                    expectedConditions.All(expected => conditions.Contains(
+                        (expected.Property, expected.Value)));
+            });
     }
 }

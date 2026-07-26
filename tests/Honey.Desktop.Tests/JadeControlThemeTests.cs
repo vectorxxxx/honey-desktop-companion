@@ -28,10 +28,63 @@ public sealed class JadeControlThemeTests
             "JadeDisabledBrush",
             "JadeErrorBrush",
             "JadePrimaryActionBrush",
+            "JadePrimaryActionHoverBrush",
+            "JadePrimaryActionPressedBrush",
             "JadeTransparentBrush",
         ];
 
         Assert.All(required, key => Assert.Contains(key, keys));
+    }
+
+    [Fact]
+    public void 禁用语义保持可读颜色且不叠加过低透明度()
+    {
+        var document = LoadTheme();
+        var disabledBrush = document
+            .Descendants(Presentation + "SolidColorBrush")
+            .Single(element => string.Equals(
+                (string?)element.Attribute(Xaml + "Key"),
+                "JadeDisabledBrush",
+                StringComparison.Ordinal));
+        var disabledOpacitySetters = document
+            .Descendants(Presentation + "Trigger")
+            .Where(trigger =>
+                string.Equals(
+                    (string?)trigger.Attribute("Property"),
+                    "IsEnabled",
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    (string?)trigger.Attribute("Value"),
+                    "False",
+                    StringComparison.Ordinal))
+            .SelectMany(trigger => trigger.Elements(Presentation + "Setter"))
+            .Where(setter => string.Equals(
+                (string?)setter.Attribute("Property"),
+                "Opacity",
+                StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.Equal("#78918C", GetAttribute(disabledBrush, "Color"));
+        Assert.Equal(8, disabledOpacitySetters.Length);
+        Assert.All(
+            disabledOpacitySetters,
+            setter => Assert.Equal("0.84", GetAttribute(setter, "Value")));
+    }
+
+    [Fact]
+    public void 设置主题计划不暴露本机用户目录()
+    {
+        var planPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "SettingsJadeControlThemePlan.md");
+        var plan = File.ReadAllText(planPath);
+
+        Assert.DoesNotContain(
+            @"C:\Users\",
+            plan,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("$env:DOTNET_ROOT", plan, StringComparison.Ordinal);
     }
 
     [Fact]
