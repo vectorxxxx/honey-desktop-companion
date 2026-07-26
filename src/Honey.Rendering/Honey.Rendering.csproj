@@ -8,6 +8,13 @@
     <PackageReference Include="SkiaSharp" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\white-jade-spider-normal-atlas.png"
+                      LogicalName="Honey.Rendering.Assets.white-jade-spider-normal-atlas.png" />
+    <EmbeddedResource Include="Assets\white-jade-spider-berserk-atlas.png"
+                      LogicalName="Honey.Rendering.Assets.white-jade-spider-berserk-atlas.png" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

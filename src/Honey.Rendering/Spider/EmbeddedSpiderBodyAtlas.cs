@@ -89,12 +89,15 @@ public sealed class EmbeddedSpiderBodyAtlas : ISpiderBodyAtlas
         var bitmap = mode == PetMode.Berserk ? _berserk : _normal;
         var index = ((direction.Index % SpiderDirection.Count) + SpiderDirection.Count)
             % SpiderDirection.Count;
-        var cell = bitmap.Width / 4;
         var column = index % 4;
         var row = index / 4;
+        var left = (int)MathF.Round(column * bitmap.Width / 4f);
+        var top = (int)MathF.Round(row * bitmap.Height / 4f);
+        var right = (int)MathF.Round((column + 1) * bitmap.Width / 4f);
+        var bottom = (int)MathF.Round((row + 1) * bitmap.Height / 4f);
         frame = new SpiderAtlasFrame(
             bitmap,
-            SKRectI.Create(column * cell, row * cell, cell, cell),
+            SKRectI.Create(left, top, right - left, bottom - top),
             new SKPoint(0.5f, 0.54f));
         return true;
     }
@@ -113,6 +116,5 @@ public sealed class EmbeddedSpiderBodyAtlas : ISpiderBodyAtlas
     private static bool IsValid(SKBitmap? bitmap) =>
         bitmap is not null
         && bitmap.Width > 0
-        && bitmap.Width == bitmap.Height
-        && bitmap.Width % 4 == 0;
+        && bitmap.Width == bitmap.Height;
 }

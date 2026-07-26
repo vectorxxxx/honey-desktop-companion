@@ -3,6 +3,7 @@
 bin/
 obj/
 artifacts/
+tmp/
 .superpowers/
 .worktrees/
 *.user
