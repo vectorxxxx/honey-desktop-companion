@@ -230,23 +230,51 @@ public sealed class SpiderHitMapTests
     }
 
     [Theory]
-    [InlineData(0, false)]
-    [InlineData(1, true)]
-    [InlineData(2, false)]
-    [InlineData(3, true)]
-    public void Create_任一非有限腿部端点均不会误命中透明区域(
+    [InlineData(0, false, 0)]
+    [InlineData(0, false, 1)]
+    [InlineData(0, false, 2)]
+    [InlineData(0, true, 0)]
+    [InlineData(0, true, 1)]
+    [InlineData(0, true, 2)]
+    [InlineData(1, false, 0)]
+    [InlineData(1, false, 1)]
+    [InlineData(1, false, 2)]
+    [InlineData(1, true, 0)]
+    [InlineData(1, true, 1)]
+    [InlineData(1, true, 2)]
+    [InlineData(2, false, 0)]
+    [InlineData(2, false, 1)]
+    [InlineData(2, false, 2)]
+    [InlineData(2, true, 0)]
+    [InlineData(2, true, 1)]
+    [InlineData(2, true, 2)]
+    [InlineData(3, false, 0)]
+    [InlineData(3, false, 1)]
+    [InlineData(3, false, 2)]
+    [InlineData(3, true, 0)]
+    [InlineData(3, true, 1)]
+    [InlineData(3, true, 2)]
+    public void Create_非有限端点不污染命中且保留有效相邻骨段(
         int pointIndex,
-        bool useInfinity)
+        bool invalidY,
+        int invalidKind)
     {
-        var invalid = useInfinity ? float.PositiveInfinity : float.NaN;
+        var invalid = invalidKind switch
+        {
+            0 => float.NaN,
+            1 => float.PositiveInfinity,
+            _ => float.NegativeInfinity
+        };
         var points = new[]
         {
             new SkiaSharp.SKPoint(20, 20),
-            new SkiaSharp.SKPoint(30, 25),
-            new SkiaSharp.SKPoint(40, 30),
-            new SkiaSharp.SKPoint(50, 35)
+            new SkiaSharp.SKPoint(40, 20),
+            new SkiaSharp.SKPoint(60, 30),
+            new SkiaSharp.SKPoint(80, 30)
         };
-        points[pointIndex] = new SkiaSharp.SKPoint(invalid, points[pointIndex].Y);
+        points[pointIndex] = invalidY
+            ? new SkiaSharp.SKPoint(points[pointIndex].X, invalid)
+            : new SkiaSharp.SKPoint(invalid, points[pointIndex].Y);
         var leg = new SpiderLeg(
             points[0],
             points[1],
@@ -258,6 +286,24 @@ public sealed class SpiderHitMapTests
 
         Assert.False(hitMap.Contains(180, 180));
         Assert.False(hitMap.Contains(70, 160));
+        var validMidpoint = pointIndex <= 1
+            ? new SkiaSharp.SKPoint(70, 30)
+            : new SkiaSharp.SKPoint(30, 20);
+        Assert.True(hitMap.Contains(validMidpoint.X, validMidpoint.Y));
+    }
+
+    [Fact]
+    public void Create_超大有限骨段中点仍可命中()
+    {
+        var leg = new SpiderLeg(
+            new SkiaSharp.SKPoint(-1e20f, 0),
+            new SkiaSharp.SKPoint(1e20f, 0),
+            new SkiaSharp.SKPoint(1e20f, 20),
+            new SkiaSharp.SKPoint(1e20f, 40),
+            4,
+            SpiderLegLayer.BehindBody);
+
+        Assert.True(SpiderHitMap.Create(PoseWithSingleLeg(leg)).Contains(0, 0));
     }
 
     [Fact]
