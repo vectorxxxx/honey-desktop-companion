@@ -671,11 +671,11 @@ public partial class App : System.Windows.Application
                     return;
                 }
 
-                var accepted = overlay.RuntimeCommands.TryRequestAiSkill(
+                var decision = overlay.RuntimeCommands.TryRequestAiSkill(
                     new Honey.Domain.Behavior.BehaviorKey(intent));
-                if (!accepted)
+                if (decision != AiSkillDecision.Accepted)
                 {
-                    Trace.TraceInformation("AI 建议因技能冷却或运行状态被忽略。");
+                    Trace.TraceInformation("AI 建议未执行：{0}", decision);
                 }
             },
             cancellationToken).ConfigureAwait(false);

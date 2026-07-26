@@ -188,9 +188,15 @@ public sealed class PetRuntimeControllerTests
     {
         var fixture = CreateRuntime();
 
-        Assert.True(fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Play)));
-        Assert.False(fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Play)));
-        Assert.False(fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Pounce)));
+        Assert.Equal(
+            AiSkillDecision.Accepted,
+            fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Play)));
+        Assert.Equal(
+            AiSkillDecision.Busy,
+            fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Play)));
+        Assert.Equal(
+            AiSkillDecision.NotAllowed,
+            fixture.Runtime.TryRequestAiSkill(new BehaviorKey(BuiltInBehaviorKeys.Pounce)));
 
         fixture.Runtime.Dispose();
     }

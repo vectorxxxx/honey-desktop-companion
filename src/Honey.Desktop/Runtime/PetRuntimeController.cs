@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Honey.Content.WhiteJadeSpider;
 using Honey.Desktop.Settings;
+using Honey.Desktop.Status;
+using Honey.Domain.Activity;
 using Honey.Domain.Behavior;
 using Honey.Domain.Model;
 using Honey.Rendering;
@@ -8,11 +10,19 @@ using Honey.Simulation;
 
 namespace Honey.Desktop.Runtime;
 
+public enum AiSkillDecision
+{
+    Accepted,
+    NotAllowed,
+    Busy,
+    Cooldown
+}
+
 public interface IPetRuntimeCommands
 {
     void Pet();
     void RequestSkill(BehaviorKey key);
-    bool TryRequestAiSkill(BehaviorKey key);
+    AiSkillDecision TryRequestAiSkill(BehaviorKey key);
     string ToggleMode();
 }
 
@@ -22,11 +32,18 @@ public interface IPetRuntimeLifecycle
     Task StopAsync();
 }
 
+public interface IPetStatusSource
+{
+    PetStatusSnapshot Status { get; }
+    event EventHandler<PetStatusSnapshot>? StatusChanged;
+}
+
 public sealed class PetRuntimeController :
     IDisposable,
     IAsyncDisposable,
     IPetRuntimeCommands,
-    IPetRuntimeLifecycle
+    IPetRuntimeLifecycle,
+    IPetStatusSource
 {
     public static readonly TimeSpan SimulationStep = TimeSpan.FromMilliseconds(250);
     public static readonly TimeSpan SkillStep = TimeSpan.FromMilliseconds(50);
@@ -39,6 +56,7 @@ public sealed class PetRuntimeController :
     private readonly UtilityIntentSelector _selector;
     private readonly SkillPlayer _player = new();
     private readonly Dictionary<BehaviorKey, TimeSpan> _lastStarted = [];
+    private readonly PetActivityJournal _activityJournal = new();
     private readonly TimeProvider _timeProvider;
     private readonly Random _random;
     private readonly System.Threading.Timer _timer;
@@ -50,6 +68,7 @@ public sealed class PetRuntimeController :
     private TimeSpan _simulationAccumulator;
     private TimeSpan _skillAccumulator;
     private TimeSpan _backgroundAccumulator;
+    private TimeSpan _statusAccumulator;
     private TimeSpan _animationElapsed;
     private SkillFrame _currentFrame = new(
         new BehaviorKey(BuiltInBehaviorKeys.Observe),
@@ -60,6 +79,8 @@ public sealed class PetRuntimeController :
     private TimeSpan _moodOverrideUntil;
     private PetState _state;
     private AppSettings _settings;
+    private ActiveBehaviorState _activeBehavior;
+    private PetStatusSnapshot _status;
     private volatile bool _paused;
     private volatile bool _hidden;
     private volatile bool _focusActive;
@@ -88,6 +109,23 @@ public sealed class PetRuntimeController :
         _selector = new UtilityIntentSelector();
         _lastTimestamp = _timeProvider.GetTimestamp();
         _nextIntent = TimeSpan.Zero;
+        var now = _timeProvider.GetUtcNow();
+        _activeBehavior = new ActiveBehaviorState(
+            new BehaviorKey(BuiltInBehaviorKeys.Observe),
+            _currentFrame.Phase,
+            BehaviorOrigin.SystemSchedule,
+            now);
+        _activityJournal.Append(new PetActivityEntry(
+            now,
+            _activeBehavior.Behavior,
+            _activeBehavior.Origin,
+            PetActivityOutcome.Started,
+            "运行时初始化"));
+        _status = PetStatusProjector.Project(
+            _state,
+            _activeBehavior,
+            _activityJournal.Entries,
+            now);
         _timer = new System.Threading.Timer(
             _ => TickSafely(),
             null,
@@ -96,10 +134,16 @@ public sealed class PetRuntimeController :
     }
 
     public event EventHandler<RenderSnapshot>? SnapshotChanged;
+    public event EventHandler<PetStatusSnapshot>? StatusChanged;
 
     public PetState State
     {
         get { lock (_sync) return _state; }
+    }
+
+    public PetStatusSnapshot Status
+    {
+        get { lock (_sync) return _status; }
     }
 
     public AppSettings Settings
@@ -109,6 +153,7 @@ public sealed class PetRuntimeController :
 
     public void ApplySettings(AppSettings settings)
     {
+        PetStatusSnapshot status;
         lock (_sync)
         {
             _settings = settings.Normalize();
@@ -117,7 +162,11 @@ public sealed class PetRuntimeController :
                 Scale = _settings.PetSize / 140d,
                 Mode = PetRuntimePolicy.ApplyModePreference(_settings.ModePreference, _state.Mode)
             };
+            RefreshStatusLocked();
+            status = _status;
         }
+
+        PublishStatus(status);
     }
 
     public void SetPaused(bool paused) => _paused = paused;
@@ -127,6 +176,7 @@ public sealed class PetRuntimeController :
     public void Pet()
     {
         RenderSnapshot snapshot;
+        PetStatusSnapshot status;
         lock (_sync)
         {
             _state = _state with
@@ -139,28 +189,42 @@ public sealed class PetRuntimeController :
                 Mood = PetMood.Happy
             };
             _moodOverrideUntil = SaturatingAdd(_skillClock, TimeSpan.FromSeconds(2));
+            _activityJournal.Append(new PetActivityEntry(
+                _timeProvider.GetUtcNow(),
+                new BehaviorKey("pet"),
+                BehaviorOrigin.UserInteraction,
+                PetActivityOutcome.Started,
+                "用户抚摸"));
+            RefreshStatusLocked();
             snapshot = BuildSnapshot();
+            status = _status;
         }
 
         PublishSnapshot(snapshot);
+        PublishStatus(status);
     }
 
     public void RequestSkill(BehaviorKey key)
     {
         RenderSnapshot snapshot;
+        PetStatusSnapshot status;
         lock (_sync)
         {
             var skill = WhiteJadeSpiderSkills.All.SingleOrDefault(item => item.Key == key)
                 ?? throw new ArgumentException($"未知技能：{key}", nameof(key));
-            snapshot = StartSkillLocked(skill);
+            snapshot = StartSkillLocked(skill, BehaviorOrigin.UserInteraction);
+            status = _status;
         }
 
         PublishSnapshot(snapshot);
+        PublishStatus(status);
     }
 
-    public bool TryRequestAiSkill(BehaviorKey key)
+    public AiSkillDecision TryRequestAiSkill(BehaviorKey key)
     {
-        RenderSnapshot snapshot;
+        RenderSnapshot? snapshot = null;
+        PetStatusSnapshot status;
+        AiSkillDecision decision;
         lock (_sync)
         {
             if (key.Value is not (
@@ -168,29 +232,53 @@ public sealed class PetRuntimeController :
                     or BuiltInBehaviorKeys.Play
                     or BuiltInBehaviorKeys.Sleep
                     or BuiltInBehaviorKeys.Forage
-                    or BuiltInBehaviorKeys.Web)
-                || _player.IsPlaying)
+                    or BuiltInBehaviorKeys.Web))
             {
-                return false;
+                decision = RejectAiLocked(
+                    key,
+                    AiSkillDecision.NotAllowed,
+                    "不在 AI 可执行白名单中");
+                status = _status;
             }
-
-            var skill = WhiteJadeSpiderSkills.All.Single(item => item.Key == key);
-            if (_lastStarted.TryGetValue(key, out var last)
-                && _skillClock - last < skill.Cooldown)
+            else if (_player.IsPlaying)
             {
-                return false;
+                decision = RejectAiLocked(key, AiSkillDecision.Busy, "当前技能尚未结束");
+                status = _status;
             }
-
-            snapshot = StartSkillLocked(skill);
+            else
+            {
+                var skill = WhiteJadeSpiderSkills.All.Single(item => item.Key == key);
+                if (_lastStarted.TryGetValue(key, out var last)
+                    && _skillClock - last < skill.Cooldown)
+                {
+                    decision = RejectAiLocked(key, AiSkillDecision.Cooldown, "技能冷却中");
+                    status = _status;
+                }
+                else
+                {
+                    snapshot = StartSkillLocked(
+                        skill,
+                        BehaviorOrigin.AiSuggestion,
+                        "AI 建议已采纳");
+                    decision = AiSkillDecision.Accepted;
+                    status = _status;
+                }
+            }
         }
 
-        PublishSnapshot(snapshot);
-        return true;
+        if (snapshot is not null)
+        {
+            PublishSnapshot(snapshot);
+        }
+
+        PublishStatus(status);
+        return decision;
     }
 
     public string ToggleMode()
     {
         RenderSnapshot snapshot;
+        PetStatusSnapshot status;
         string preference;
         lock (_sync)
         {
@@ -203,10 +291,19 @@ public sealed class PetRuntimeController :
                 Mood = mode == PetMode.Berserk ? PetMood.Angry : PetMood.Curious
             };
             _moodOverrideUntil = SaturatingAdd(_skillClock, TimeSpan.FromSeconds(2));
+            _activityJournal.Append(new PetActivityEntry(
+                _timeProvider.GetUtcNow(),
+                new BehaviorKey("mode"),
+                BehaviorOrigin.UserInteraction,
+                PetActivityOutcome.Started,
+                preference));
+            RefreshStatusLocked();
             snapshot = BuildSnapshot();
+            status = _status;
         }
 
         PublishSnapshot(snapshot);
+        PublishStatus(status);
         return preference;
     }
 
@@ -219,10 +316,13 @@ public sealed class PetRuntimeController :
 
         var applied = elapsed > MaximumCatchUp ? MaximumCatchUp : elapsed;
         RenderSnapshot snapshot;
+        PetStatusSnapshot status;
         var publish = false;
+        var publishStatus = false;
         lock (_sync)
         {
             _animationElapsed = SaturatingAdd(_animationElapsed, applied);
+            _statusAccumulator = SaturatingAdd(_statusAccumulator, applied);
             if (_paused || _hidden)
             {
                 _backgroundAccumulator += applied;
@@ -256,12 +356,26 @@ public sealed class PetRuntimeController :
                 publish = applied > TimeSpan.Zero;
             }
 
+            RefreshStatusLocked();
+            if (_statusAccumulator >= SimulationStep)
+            {
+                _statusAccumulator = TimeSpan.FromTicks(
+                    _statusAccumulator.Ticks % SimulationStep.Ticks);
+                publishStatus = true;
+            }
+
             snapshot = BuildSnapshot();
+            status = _status;
         }
 
         if (publish)
         {
             PublishSnapshot(snapshot);
+        }
+
+        if (publishStatus)
+        {
+            PublishStatus(status);
         }
 
         return snapshot;
@@ -298,11 +412,26 @@ public sealed class PetRuntimeController :
         };
     }
 
-    private RenderSnapshot StartSkillLocked(SkillDefinition skill)
+    private RenderSnapshot StartSkillLocked(
+        SkillDefinition skill,
+        BehaviorOrigin origin,
+        string? detail = null)
     {
         _player.Start(skill);
         _currentFrame = _player.Advance(TimeSpan.Zero);
         _lastStarted[skill.Key] = _skillClock;
+        var now = _timeProvider.GetUtcNow();
+        _activeBehavior = new ActiveBehaviorState(
+            skill.Key,
+            _currentFrame.Phase,
+            origin,
+            now);
+        _activityJournal.Append(new PetActivityEntry(
+            now,
+            skill.Key,
+            origin,
+            PetActivityOutcome.Started,
+            detail));
         _state = _state with
         {
             PreviousBehavior = skill.Key,
@@ -316,6 +445,7 @@ public sealed class PetRuntimeController :
         _nextIntent = SaturatingAdd(
             SaturatingAdd(_skillClock, skill.TimelineDuration),
             PetRuntimePolicy.IntentInterval(_settings.ActivityLevel, _focusActive));
+        RefreshStatusLocked();
         return BuildSnapshot();
     }
 
@@ -325,6 +455,16 @@ public sealed class PetRuntimeController :
         if (_player.IsPlaying)
         {
             _currentFrame = _player.Advance(step);
+            _activeBehavior = _activeBehavior with { Phase = _currentFrame.Phase };
+            if (!_player.IsPlaying)
+            {
+                _activityJournal.Append(new PetActivityEntry(
+                    _timeProvider.GetUtcNow(),
+                    _activeBehavior.Behavior,
+                    _activeBehavior.Origin,
+                    PetActivityOutcome.Completed));
+            }
+
             return;
         }
 
@@ -333,14 +473,7 @@ public sealed class PetRuntimeController :
             return;
         }
 
-        var skill = SelectSkill(_skillClock);
-        _player.Start(skill);
-        _lastStarted[skill.Key] = _skillClock;
-        _state = _state with { PreviousBehavior = skill.Key };
-        _currentFrame = _player.Advance(TimeSpan.Zero);
-        _nextIntent = SaturatingAdd(
-            SaturatingAdd(_skillClock, skill.TimelineDuration),
-            PetRuntimePolicy.IntentInterval(_settings.ActivityLevel, _focusActive));
+        StartSkillLocked(SelectSkill(_skillClock), BehaviorOrigin.LocalAutonomy);
     }
 
     private SkillDefinition SelectSkill(TimeSpan now)
@@ -354,6 +487,31 @@ public sealed class PetRuntimeController :
         }).ToArray();
         var selected = _selector.Select(candidates, _state.PreviousBehavior, _random.NextDouble());
         return WhiteJadeSpiderSkills.All.Single(skill => skill.Key == selected.Key);
+    }
+
+    private AiSkillDecision RejectAiLocked(
+        BehaviorKey key,
+        AiSkillDecision decision,
+        string reason)
+    {
+        _activityJournal.Append(new PetActivityEntry(
+            _timeProvider.GetUtcNow(),
+            key,
+            BehaviorOrigin.AiSuggestion,
+            PetActivityOutcome.Rejected,
+            reason));
+        RefreshStatusLocked();
+        return decision;
+    }
+
+    private void RefreshStatusLocked()
+    {
+        _activeBehavior = _activeBehavior with { Phase = _currentFrame.Phase };
+        _status = PetStatusProjector.Project(
+            _state,
+            _activeBehavior,
+            _activityJournal.Entries,
+            _timeProvider.GetUtcNow());
     }
 
     private void TickSafely()
@@ -412,6 +570,28 @@ public sealed class PetRuntimeController :
             catch (Exception exception)
             {
                 Trace.TraceError("运行态快照订阅者失败：{0}", exception);
+            }
+        }
+    }
+
+    private void PublishStatus(PetStatusSnapshot status)
+    {
+        var handlers = StatusChanged;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (var subscriber in handlers.GetInvocationList()
+                     .Cast<EventHandler<PetStatusSnapshot>>())
+        {
+            try
+            {
+                subscriber(this, status);
+            }
+            catch (Exception exception)
+            {
+                Trace.TraceError("灵兽状态订阅者失败：{0}", exception);
             }
         }
     }
