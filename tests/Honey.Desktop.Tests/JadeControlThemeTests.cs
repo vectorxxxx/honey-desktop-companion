@@ -96,49 +96,90 @@ public sealed class JadeControlThemeTests
         var style = GetImplicitStyle("ComboBox");
         var template = GetControlTemplate(style);
         var toggleStyle = GetNamedStyle("JadeComboBoxToggleButton");
+        var toggleTemplate = GetControlTemplate(toggleStyle);
+        var arrow = Assert.Single(toggleTemplate.Descendants(Presentation + "Path"));
+        var toggle = GetNamedElement(template, "DropDownToggle", "ToggleButton");
+        var selectionPresenter =
+            GetNamedElement(template, "SelectionPresenter", "ContentPresenter");
+        var editableTextBox =
+            GetNamedElement(template, "PART_EditableTextBox", "TextBox");
+        var popup = GetNamedElement(template, "PART_Popup", "Popup");
+        var popupBorder = GetNamedElement(template, "PopupBorder", "Border");
+        var popupScrollViewer =
+            Assert.Single(popupBorder.Descendants(Presentation + "ScrollViewer"));
 
-        Assert.Contains(
-            toggleStyle.Descendants(Presentation + "Path"),
-            path => string.Equals(
-                (string?)path.Attribute("Data"),
-                "M 1 1 L 5 5 L 9 1",
-                StringComparison.Ordinal));
-        Assert.Contains(
-            template.Descendants(Presentation + "ToggleButton"),
-            element =>
-                string.Equals(
-                    (string?)element.Attribute("IsChecked"),
-                    "{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}",
-                    StringComparison.Ordinal) &&
-                string.Equals(
-                    (string?)element.Attribute("Style"),
-                    "{StaticResource JadeComboBoxToggleButton}",
-                    StringComparison.Ordinal));
+        Assert.Equal("M 1 1 L 5 5 L 9 1", GetAttribute(arrow, "Data"));
+        Assert.Equal(
+            "{StaticResource JadeComboBoxToggleButton}",
+            GetAttribute(toggle, "Style"));
+        AssertBinding(
+            toggle,
+            "IsChecked",
+            "IsDropDownOpen",
+            ("Mode", "TwoWay"),
+            ("RelativeSource", "{RelativeSource TemplatedParent}"));
+        AssertEffectiveValue(toggle, toggleStyle, "Focusable", "False");
+        AssertEffectiveValue(toggle, toggleStyle, "ClickMode", "Press");
 
-        AssertNamedPart(template, "PART_EditableTextBox", "TextBox");
-        var popup = AssertNamedPart(template, "PART_Popup", "Popup");
-        Assert.Equal("Bottom", (string?)popup.Attribute("Placement"));
-        Assert.Equal("True", (string?)popup.Attribute("AllowsTransparency"));
-        Assert.Equal("Fade", (string?)popup.Attribute("PopupAnimation"));
-        Assert.Contains(
-            popup.Descendants(Presentation + "ScrollViewer"),
-            viewer => viewer.Descendants(Presentation + "ItemsPresenter").Any());
-        Assert.Contains(
-            template.Descendants(Presentation + "ContentPresenter"),
-            presenter =>
-                string.Equals(
-                    (string?)presenter.Attribute("Content"),
-                    "{TemplateBinding SelectionBoxItem}",
-                    StringComparison.Ordinal));
+        Assert.Equal(
+            "{TemplateBinding SelectionBoxItem}",
+            GetAttribute(selectionPresenter, "Content"));
+        Assert.Equal("{x:Null}", GetAttribute(editableTextBox, "Style"));
 
-        AssertTemplateTrigger(style, "IsEditable");
-        AssertTemplateTrigger(style, "IsKeyboardFocusWithin");
-        AssertTemplateTrigger(style, "IsEnabled");
-        Assert.Contains(
-            template.Descendants(Presentation + "Popup"),
-            element => ((string?)element.Attribute("IsOpen"))?.Contains(
-                "IsDropDownOpen",
-                StringComparison.Ordinal) is true);
+        Assert.Equal("True", GetAttribute(popup, "AllowsTransparency"));
+        Assert.Equal("False", GetAttribute(popup, "Focusable"));
+        AssertTemplateBinding(popup, "IsOpen", "IsDropDownOpen");
+        Assert.Equal("Bottom", GetAttribute(popup, "Placement"));
+        Assert.Equal("Fade", GetAttribute(popup, "PopupAnimation"));
+
+        AssertBinding(
+            popupBorder,
+            "MinWidth",
+            "ActualWidth",
+            ("RelativeSource", "{RelativeSource TemplatedParent}"));
+        Assert.Equal("280", GetAttribute(popupBorder, "MaxHeight"));
+        Assert.Equal("True", GetAttribute(popupScrollViewer, "CanContentScroll"));
+        Assert.Equal(
+            "Disabled",
+            GetAttribute(popupScrollViewer, "HorizontalScrollBarVisibility"));
+        Assert.Equal(
+            "Auto",
+            GetAttribute(popupScrollViewer, "VerticalScrollBarVisibility"));
+        Assert.Single(popupScrollViewer.Descendants(Presentation + "ItemsPresenter"));
+
+        var editableTrigger = GetTemplateTrigger(template, "IsEditable", "True");
+        AssertSetter(
+            editableTrigger,
+            "SelectionPresenter",
+            "Visibility",
+            "Collapsed");
+        AssertSetter(
+            editableTrigger,
+            "PART_EditableTextBox",
+            "Visibility",
+            "Visible");
+
+        var focusTrigger =
+            GetTemplateTrigger(template, "IsKeyboardFocusWithin", "True");
+        AssertSetter(
+            focusTrigger,
+            "ComboBorder",
+            "BorderBrush",
+            "{StaticResource JadeAccentStrongBrush}");
+        AssertSetter(focusTrigger, "ComboBorder", "BorderThickness", "2");
+
+        var disabledTrigger = GetTemplateTrigger(template, "IsEnabled", "False");
+        AssertSetter(
+            disabledTrigger,
+            "ComboBorder",
+            "Background",
+            "{StaticResource JadeDisabledBrush}");
+        AssertSetter(
+            disabledTrigger,
+            "ComboBorder",
+            "BorderBrush",
+            "{StaticResource JadeDisabledBrush}");
+        AssertSetter(disabledTrigger, "ComboRoot", "Opacity", "0.68");
     }
 
     [Fact]
@@ -146,25 +187,49 @@ public sealed class JadeControlThemeTests
     {
         var style = GetImplicitStyle("ComboBoxItem");
         var template = GetControlTemplate(style);
-        var itemBorder = AssertNamedPart(template, "ItemBorder", "Border");
+        var itemBorder = GetNamedElement(template, "ItemBorder", "Border");
 
-        Assert.Equal("34", (string?)itemBorder.Attribute("MinHeight"));
-        Assert.Equal("10,6", (string?)itemBorder.Attribute("Padding"));
-        Assert.Equal("4", (string?)itemBorder.Attribute("CornerRadius"));
-        Assert.Equal("3,0,0,0", (string?)itemBorder.Attribute("BorderThickness"));
-        Assert.Contains(
-            itemBorder.Elements(Presentation + "ContentPresenter"),
-            _ => true);
+        Assert.Equal("34", GetAttribute(itemBorder, "MinHeight"));
+        Assert.Equal("10,6", GetAttribute(itemBorder, "Padding"));
+        Assert.Equal("4", GetAttribute(itemBorder, "CornerRadius"));
+        Assert.Equal("3,0,0,0", GetAttribute(itemBorder, "BorderThickness"));
+        Assert.Single(itemBorder.Elements(Presentation + "ContentPresenter"));
 
-        AssertTemplateTrigger(style, "IsMouseOver");
-        AssertTemplateTrigger(style, "IsSelected");
-        AssertTemplateTrigger(style, "IsKeyboardFocusWithin");
-        AssertTemplateTrigger(style, "IsEnabled");
-        Assert.Contains(
-            template.Descendants(Presentation + "Setter"),
-            setter =>
-                string.Equals((string?)setter.Attribute("Property"), "Background", StringComparison.Ordinal) &&
-                string.Equals((string?)setter.Attribute("Value"), "#173735", StringComparison.Ordinal));
+        var triggers = GetTemplateTriggers(template).ToArray();
+        Assert.Equal(
+            ["IsMouseOver", "IsSelected", "IsKeyboardFocusWithin", "IsEnabled"],
+            triggers.Select(trigger => GetAttribute(trigger, "Property")));
+        Assert.Equal(
+            ["True", "True", "True", "False"],
+            triggers.Select(trigger => GetAttribute(trigger, "Value")));
+
+        AssertSetter(triggers[0], "ItemBorder", "Background", "#173735");
+        AssertSetter(
+            triggers[1],
+            "ItemBorder",
+            "Background",
+            "{StaticResource JadeSelectionBrush}");
+        AssertSetter(
+            triggers[1],
+            "ItemBorder",
+            "BorderBrush",
+            "{StaticResource JadeAccentBrush}");
+        AssertSetter(
+            triggers[1],
+            null,
+            "Foreground",
+            "{StaticResource JadeAccentStrongBrush}");
+        AssertSetter(
+            triggers[2],
+            "ItemBorder",
+            "BorderBrush",
+            "{StaticResource JadeAccentStrongBrush}");
+        AssertSetter(
+            triggers[3],
+            null,
+            "Foreground",
+            "{StaticResource JadeDisabledBrush}");
+        AssertSetter(triggers[3], "ItemBorder", "Opacity", "0.68");
     }
 
     [Fact]
@@ -172,63 +237,114 @@ public sealed class JadeControlThemeTests
     {
         var style = GetImplicitStyle("ScrollBar");
         var template = GetControlTemplate(style);
-        var track = AssertNamedPart(template, "PART_Track", "Track");
-        var horizontalTrigger = template
-            .Descendants(Presentation + "Trigger")
-            .SingleOrDefault(trigger =>
-                string.Equals((string?)trigger.Attribute("Property"), "Orientation", StringComparison.Ordinal) &&
-                string.Equals((string?)trigger.Attribute("Value"), "Horizontal", StringComparison.Ordinal));
+        var track = GetNamedElement(template, "PART_Track", "Track");
+        var decreaseButton =
+            GetNamedElement(template, "DecreasePageButton", "RepeatButton");
+        var increaseButton =
+            GetNamedElement(template, "IncreasePageButton", "RepeatButton");
 
-        AssertCommandReference(template, "PageUpCommand");
-        AssertCommandReference(template, "PageDownCommand");
-        AssertCommandReference(template, "PageLeftCommand");
-        AssertCommandReference(template, "PageRightCommand");
-        Assert.Contains(
-            style.Elements(Presentation + "Setter"),
-            setter =>
-                string.Equals((string?)setter.Attribute("Property"), "Width", StringComparison.Ordinal) &&
-                string.Equals((string?)setter.Attribute("Value"), "10", StringComparison.Ordinal));
-        Assert.NotNull(horizontalTrigger);
-        Assert.Contains(
-            horizontalTrigger.Elements(Presentation + "Setter"),
-            setter =>
-                string.Equals((string?)setter.Attribute("Property"), "Height", StringComparison.Ordinal) &&
-                string.Equals((string?)setter.Attribute("Value"), "10", StringComparison.Ordinal));
-        Assert.Contains(
-            track
-                .Element(Presentation + "Track.Thumb")?
-                .Elements(Presentation + "Thumb") ?? [],
-            _ => true);
+        Assert.Single(
+            template.Descendants(),
+            element => string.Equals(
+                (string?)element.Attribute(Xaml + "Name"),
+                "PART_Track",
+                StringComparison.Ordinal));
+        AssertTemplateBinding(track, "Maximum", "Maximum");
+        AssertTemplateBinding(track, "Minimum", "Minimum");
+        AssertTemplateBinding(track, "Orientation", "Orientation");
+        AssertTemplateBinding(track, "Value", "Value");
+        AssertTemplateBinding(track, "ViewportSize", "ViewportSize");
+        Assert.Equal("True", GetAttribute(track, "IsDirectionReversed"));
+
+        Assert.Equal(
+            "{x:Static ScrollBar.PageUpCommand}",
+            GetAttribute(decreaseButton, "Command"));
+        Assert.Equal(
+            "{x:Static ScrollBar.PageDownCommand}",
+            GetAttribute(increaseButton, "Command"));
+        AssertBinding(
+            decreaseButton,
+            "CommandTarget",
+            null,
+            ("RelativeSource", "{RelativeSource TemplatedParent}"));
+        AssertBinding(
+            increaseButton,
+            "CommandTarget",
+            null,
+            ("RelativeSource", "{RelativeSource TemplatedParent}"));
+
+        AssertStyleSetter(style, "Width", "10");
+        var horizontalTrigger =
+            GetTemplateTrigger(template, "Orientation", "Horizontal");
+        AssertSetter(horizontalTrigger, null, "Width", "Auto");
+        AssertSetter(horizontalTrigger, null, "Height", "10");
+        AssertSetter(
+            horizontalTrigger,
+            "PART_Track",
+            "IsDirectionReversed",
+            "False");
+        AssertSetter(
+            horizontalTrigger,
+            "DecreasePageButton",
+            "Command",
+            "{x:Static ScrollBar.PageLeftCommand}");
+        AssertSetter(
+            horizontalTrigger,
+            "IncreasePageButton",
+            "Command",
+            "{x:Static ScrollBar.PageRightCommand}");
+
+        var trackThumbContainer =
+            Assert.Single(track.Elements(Presentation + "Track.Thumb"));
+        var trackThumb =
+            Assert.Single(trackThumbContainer.Elements(Presentation + "Thumb"));
+        Assert.Equal(
+            "{StaticResource JadeScrollBarThumb}",
+            GetAttribute(trackThumb, "Style"));
 
         var thumbStyle = GetNamedStyle("JadeScrollBarThumb");
-        AssertTemplateTrigger(thumbStyle, "IsMouseOver");
-        AssertTemplateTrigger(thumbStyle, "IsDragging");
+        AssertStyleSetter(thumbStyle, "Background", "#4C7F76");
+        var thumbTemplate = GetControlTemplate(thumbStyle);
+        AssertSetter(
+            GetTemplateTrigger(thumbTemplate, "IsMouseOver", "True"),
+            "ThumbBorder",
+            "Background",
+            "{StaticResource JadeAccentBrush}");
+        AssertSetter(
+            GetTemplateTrigger(thumbTemplate, "IsDragging", "True"),
+            "ThumbBorder",
+            "Background",
+            "{StaticResource JadeAccentStrongBrush}");
 
         var pageButtonStyle = GetNamedStyle("JadeScrollBarPageButton");
-        Assert.Contains(
-            pageButtonStyle.Descendants(Presentation + "Border"),
-            border => string.Equals(
-                (string?)border.Attribute("Background"),
-                "{StaticResource JadeTransparentBrush}",
-                StringComparison.Ordinal));
+        var pageButtonTemplate = GetControlTemplate(pageButtonStyle);
+        var pageButtonBorder =
+            Assert.Single(pageButtonTemplate.Descendants(Presentation + "Border"));
+        Assert.Equal(
+            "{StaticResource JadeTransparentBrush}",
+            GetAttribute(pageButtonBorder, "Background"));
     }
 
     [Fact]
     public void 墨玉控件模板不回退到系统窗口白色画刷()
     {
         var document = LoadTheme();
-        var attributeValues = document
-            .Descendants()
-            .Attributes()
-            .Select(attribute => attribute.Value)
-            .ToArray();
+        var attributeValues = document.Descendants().Attributes().ToArray();
+        string[] disallowedColors = ["White", "#FFF", "#FFFFFF", "#FFFFFFFF"];
 
         Assert.DoesNotContain(
             attributeValues,
-            value => value.Contains("SystemColors.WindowBrushKey", StringComparison.Ordinal));
-        Assert.DoesNotContain(
-            attributeValues,
-            value => string.Equals(value, "White", StringComparison.OrdinalIgnoreCase));
+            attribute => attribute.Value.Contains(
+                "SystemColors.WindowBrushKey",
+                StringComparison.OrdinalIgnoreCase));
+        Assert.All(
+            disallowedColors,
+            color => Assert.DoesNotContain(
+                attributeValues,
+                attribute => string.Equals(
+                    attribute.Value.Trim(),
+                    color,
+                    StringComparison.OrdinalIgnoreCase)));
     }
 
     private static XDocument LoadTheme()
@@ -276,7 +392,7 @@ public sealed class JadeControlThemeTests
         return Assert.IsType<XElement>(template);
     }
 
-    private static XElement AssertNamedPart(
+    private static XElement GetNamedElement(
         XElement template,
         string partName,
         string elementName)
@@ -291,30 +407,174 @@ public sealed class JadeControlThemeTests
         return Assert.IsType<XElement>(part);
     }
 
-    private static void AssertTemplateTrigger(XElement style, string property)
+    private static IEnumerable<XElement> GetTemplateTriggers(XElement template)
     {
-        var template = GetControlTemplate(style);
+        var triggers = template.Element(Presentation + "ControlTemplate.Triggers");
 
-        Assert.Contains(
-            template.Descendants(Presentation + "Trigger"),
-            trigger => string.Equals(
-                (string?)trigger.Attribute("Property"),
+        return Assert
+            .IsType<XElement>(triggers)
+            .Elements(Presentation + "Trigger");
+    }
+
+    private static XElement GetTemplateTrigger(
+        XElement template,
+        string property,
+        string value)
+    {
+        var trigger = GetTemplateTriggers(template).SingleOrDefault(element =>
+            string.Equals(
+                (string?)element.Attribute("Property"),
+                property,
+                StringComparison.Ordinal) &&
+            string.Equals(
+                (string?)element.Attribute("Value"),
+                value,
+                StringComparison.Ordinal));
+
+        return Assert.IsType<XElement>(trigger);
+    }
+
+    private static void AssertStyleSetter(
+        XElement style,
+        string property,
+        string value) =>
+        AssertSetter(style, null, property, value);
+
+    private static void AssertEffectiveValue(
+        XElement element,
+        XElement style,
+        string property,
+        string value)
+    {
+        var localValue = (string?)element.Attribute(property);
+        if (localValue is not null)
+        {
+            Assert.Equal(value, localValue);
+            return;
+        }
+
+        AssertStyleSetter(style, property, value);
+    }
+
+    private static void AssertSetter(
+        XElement owner,
+        string? targetName,
+        string property,
+        string value)
+    {
+        var setter = owner.Elements(Presentation + "Setter").SingleOrDefault(element =>
+            string.Equals(
+                (string?)element.Attribute("TargetName"),
+                targetName,
+                StringComparison.Ordinal) &&
+            string.Equals(
+                (string?)element.Attribute("Property"),
                 property,
                 StringComparison.Ordinal));
+
+        Assert.Equal(value, GetAttribute(Assert.IsType<XElement>(setter), "Value"));
     }
 
-    private static void AssertCommandReference(XElement template, string command)
+    private static void AssertTemplateBinding(
+        XElement element,
+        string attributeName,
+        string property) =>
+        Assert.Equal(
+            $"{{TemplateBinding {property}}}",
+            GetAttribute(element, attributeName));
+
+    private static void AssertBinding(
+        XElement element,
+        string attributeName,
+        string? expectedPath,
+        params (string Name, string Value)[] expectedOptions)
     {
-        Assert.Contains(
-            template.Descendants().Attributes(),
-            attribute =>
-                (string.Equals(attribute.Name.LocalName, "Command", StringComparison.Ordinal) ||
-                 string.Equals(attribute.Name.LocalName, "Value", StringComparison.Ordinal)) &&
-                string.Equals(
-                    attribute.Value,
-                    $"{{x:Static ScrollBar.{command}}}",
-                    StringComparison.Ordinal));
+        var binding = ParseBinding(GetAttribute(element, attributeName));
+
+        Assert.Equal(expectedPath, binding.Path);
+        Assert.Equal(expectedOptions.Length, binding.Options.Count);
+        Assert.All(
+            expectedOptions,
+            expected =>
+            {
+                Assert.True(
+                    binding.Options.TryGetValue(expected.Name, out var actual),
+                    $"绑定缺少选项 {expected.Name}。");
+                Assert.Equal(expected.Value, actual);
+            });
     }
+
+    private static ParsedBinding ParseBinding(string markup)
+    {
+        Assert.StartsWith("{Binding", markup, StringComparison.Ordinal);
+        Assert.EndsWith("}", markup, StringComparison.Ordinal);
+
+        var body = markup["{Binding".Length..^1].Trim();
+        var parts = SplitMarkupArguments(body);
+        string? path = null;
+        var options = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var part in parts)
+        {
+            var separator = part.IndexOf('=');
+            if (separator < 0)
+            {
+                Assert.Null(path);
+                path = part;
+                continue;
+            }
+
+            var name = part[..separator].Trim();
+            var value = part[(separator + 1)..].Trim();
+            Assert.True(options.TryAdd(name, value), $"绑定选项 {name} 重复。");
+        }
+
+        return new ParsedBinding(
+            string.IsNullOrEmpty(path) ? null : path,
+            options);
+    }
+
+    private static IReadOnlyList<string> SplitMarkupArguments(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return [];
+        }
+
+        var parts = new List<string>();
+        var depth = 0;
+        var start = 0;
+        for (var index = 0; index < body.Length; index++)
+        {
+            switch (body[index])
+            {
+                case '{':
+                    depth++;
+                    break;
+                case '}':
+                    depth--;
+                    break;
+                case ',' when depth == 0:
+                    parts.Add(body[start..index].Trim());
+                    start = index + 1;
+                    break;
+            }
+        }
+
+        Assert.Equal(0, depth);
+        parts.Add(body[start..].Trim());
+        return parts;
+    }
+
+    private static string GetAttribute(XElement element, string attributeName)
+    {
+        var attribute = element.Attribute(attributeName);
+        return Assert.IsType<XAttribute>(attribute).Value;
+    }
+
+    private sealed record ParsedBinding(
+        string? Path,
+        IReadOnlyDictionary<string, string> Options);
 
     private static XDocument LoadFixture(string fileName)
     {
