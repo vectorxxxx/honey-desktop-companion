@@ -88,12 +88,12 @@ public sealed class JadeSelectionControlThemeTests
             disabledTrigger,
             "ComboBorder",
             "Background",
-            "{StaticResource JadeDisabledBrush}");
+            "{StaticResource JadeDisabledSurfaceBrush}");
         AssertSetter(
             disabledTrigger,
             "ComboBorder",
             "BorderBrush",
-            "{StaticResource JadeDisabledBrush}");
+            "{StaticResource JadeDisabledSurfaceBrush}");
         AssertSetter(disabledTrigger, "ComboRoot", "Opacity", "0.84");
     }
 
@@ -143,7 +143,7 @@ public sealed class JadeSelectionControlThemeTests
             triggers[3],
             null,
             "Foreground",
-            "{StaticResource JadeDisabledBrush}");
+            "{StaticResource JadeDisabledForegroundBrush}");
         AssertSetter(triggers[3], "ItemBorder", "Opacity", "0.84");
     }
 

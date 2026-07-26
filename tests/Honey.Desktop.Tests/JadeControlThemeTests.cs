@@ -25,7 +25,8 @@ public sealed class JadeControlThemeTests
             "JadeAccentBrush",
             "JadeAccentStrongBrush",
             "JadeSelectionBrush",
-            "JadeDisabledBrush",
+            "JadeDisabledForegroundBrush",
+            "JadeDisabledSurfaceBrush",
             "JadeErrorBrush",
             "JadePrimaryActionBrush",
             "JadePrimaryActionHoverBrush",
@@ -40,12 +41,6 @@ public sealed class JadeControlThemeTests
     public void 禁用语义保持可读颜色且不叠加过低透明度()
     {
         var document = LoadTheme();
-        var disabledBrush = document
-            .Descendants(Presentation + "SolidColorBrush")
-            .Single(element => string.Equals(
-                (string?)element.Attribute(Xaml + "Key"),
-                "JadeDisabledBrush",
-                StringComparison.Ordinal));
         var disabledOpacitySetters = document
             .Descendants(Presentation + "Trigger")
             .Where(trigger =>
@@ -64,11 +59,38 @@ public sealed class JadeControlThemeTests
                 StringComparison.Ordinal))
             .ToArray();
 
-        Assert.Equal("#78918C", GetAttribute(disabledBrush, "Color"));
         Assert.Equal(8, disabledOpacitySetters.Length);
         Assert.All(
             disabledOpacitySetters,
             setter => Assert.Equal("0.84", GetAttribute(setter, "Value")));
+
+        var foreground = GetBrushColor(
+            document,
+            "JadeDisabledForegroundBrush");
+        var surface = GetBrushColor(document, "JadeDisabledSurfaceBrush");
+        AssertContrastAtLeast(
+            "禁用按钮",
+            foreground,
+            surface,
+            4.5);
+    }
+
+    [Fact]
+    public void 主操作悬停与按下状态保持正文对比度()
+    {
+        var document = LoadTheme();
+        var text = GetBrushColor(document, "JadeTextBrush");
+
+        AssertContrastAtLeast(
+            "主操作悬停",
+            text,
+            GetBrushColor(document, "JadePrimaryActionHoverBrush"),
+            4.5);
+        AssertContrastAtLeast(
+            "主操作按下",
+            text,
+            GetBrushColor(document, "JadePrimaryActionPressedBrush"),
+            4.5);
     }
 
     [Fact]
@@ -159,4 +181,58 @@ public sealed class JadeControlThemeTests
                     color,
                     StringComparison.OrdinalIgnoreCase)));
     }
+
+    private static string GetBrushColor(
+        XDocument document,
+        string key)
+    {
+        var brush = document
+            .Descendants(Presentation + "SolidColorBrush")
+            .Single(element => string.Equals(
+                (string?)element.Attribute(Xaml + "Key"),
+                key,
+                StringComparison.Ordinal));
+        return GetAttribute(brush, "Color");
+    }
+
+    private static void AssertContrastAtLeast(
+        string state,
+        string foreground,
+        string background,
+        double minimum)
+    {
+        var contrast = CalculateContrast(foreground, background);
+
+        Assert.True(
+            contrast >= minimum,
+            $"{state}对比度为 {contrast:F3}:1，低于 {minimum:F1}:1。");
+    }
+
+    private static double CalculateContrast(
+        string foreground,
+        string background)
+    {
+        var foregroundLuminance = CalculateRelativeLuminance(foreground);
+        var backgroundLuminance = CalculateRelativeLuminance(background);
+        var lighter = Math.Max(foregroundLuminance, backgroundLuminance);
+        var darker = Math.Min(foregroundLuminance, backgroundLuminance);
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    private static double CalculateRelativeLuminance(string color)
+    {
+        Assert.Matches("^#[0-9A-Fa-f]{6}$", color);
+        var red = Convert.ToByte(color.Substring(1, 2), 16) / 255d;
+        var green = Convert.ToByte(color.Substring(3, 2), 16) / 255d;
+        var blue = Convert.ToByte(color.Substring(5, 2), 16) / 255d;
+
+        return 0.2126 * Linearize(red) +
+            0.7152 * Linearize(green) +
+            0.0722 * Linearize(blue);
+    }
+
+    private static double Linearize(double component) =>
+        component <= 0.04045
+            ? component / 12.92
+            : Math.Pow((component + 0.055) / 1.055, 2.4);
 }

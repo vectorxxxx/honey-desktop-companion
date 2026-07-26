@@ -78,7 +78,7 @@ public sealed class JadeFormControlThemeTests
             disabled,
             null,
             "Foreground",
-            "{StaticResource JadeDisabledBrush}");
+            "{StaticResource JadeDisabledForegroundBrush}");
     }
 
     [Fact]
@@ -371,12 +371,12 @@ public sealed class JadeFormControlThemeTests
             disabled,
             "ButtonBorder",
             "Background",
-            "{StaticResource JadeDisabledBrush}");
+            "{StaticResource JadeDisabledSurfaceBrush}");
         AssertSetter(
             disabled,
             null,
             "Foreground",
-            "{StaticResource JadeMutedTextBrush}");
+            "{StaticResource JadeDisabledForegroundBrush}");
         AssertSetter(disabled, "ButtonRoot", "Opacity", "0.84");
 
         var settings = LoadFixture("SettingsWindow.xaml");
@@ -463,12 +463,12 @@ public sealed class JadeFormControlThemeTests
             disabled,
             "InputBorder",
             "Background",
-            "{StaticResource JadeDisabledBrush}");
+            "{StaticResource JadeDisabledSurfaceBrush}");
         AssertSetter(
             disabled,
             "InputBorder",
             "BorderBrush",
-            "{StaticResource JadeDisabledBrush}");
+            "{StaticResource JadeDisabledSurfaceBrush}");
         AssertSetter(disabled, "InputRoot", "Opacity", "0.84");
     }
 

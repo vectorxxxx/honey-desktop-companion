@@ -9,10 +9,11 @@
     <SolidColorBrush x:Key="JadeAccentBrush" Color="#8ED7CA"/>
     <SolidColorBrush x:Key="JadeAccentStrongBrush" Color="#A9F5E7"/>
     <SolidColorBrush x:Key="JadeSelectionBrush" Color="#1D4943"/>
-    <SolidColorBrush x:Key="JadeDisabledBrush" Color="#78918C"/>
+    <SolidColorBrush x:Key="JadeDisabledForegroundBrush" Color="#B8CCC8"/>
+    <SolidColorBrush x:Key="JadeDisabledSurfaceBrush" Color="#30413F"/>
     <SolidColorBrush x:Key="JadeErrorBrush" Color="#FF8C86"/>
     <SolidColorBrush x:Key="JadePrimaryActionBrush" Color="#2F6D64"/>
-    <SolidColorBrush x:Key="JadePrimaryActionHoverBrush" Color="#3A7F74"/>
+    <SolidColorBrush x:Key="JadePrimaryActionHoverBrush" Color="#39796F"/>
     <SolidColorBrush x:Key="JadePrimaryActionPressedBrush" Color="#24564F"/>
     <SolidColorBrush x:Key="JadeTransparentBrush" Color="Transparent"/>
 
@@ -154,10 +155,10 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="ComboBorder"
                                     Property="Background"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledSurfaceBrush}"/>
                             <Setter TargetName="ComboBorder"
                                     Property="BorderBrush"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledSurfaceBrush}"/>
                             <Setter TargetName="ComboRoot"
                                     Property="Opacity"
                                     Value="0.84"/>
@@ -213,7 +214,7 @@
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledForegroundBrush}"/>
                             <Setter TargetName="ItemBorder"
                                     Property="Opacity"
                                     Value="0.84"/>
@@ -421,7 +422,7 @@
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledForegroundBrush}"/>
                             <Setter TargetName="CheckRoot"
                                     Property="Opacity"
                                     Value="0.84"/>
@@ -670,10 +671,10 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="InputBorder"
                                     Property="Background"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledSurfaceBrush}"/>
                             <Setter TargetName="InputBorder"
                                     Property="BorderBrush"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledSurfaceBrush}"/>
                             <Setter TargetName="InputRoot"
                                     Property="Opacity"
                                     Value="0.84"/>
@@ -732,10 +733,10 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="InputBorder"
                                     Property="Background"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledSurfaceBrush}"/>
                             <Setter TargetName="InputBorder"
                                     Property="BorderBrush"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledSurfaceBrush}"/>
                             <Setter TargetName="InputRoot"
                                     Property="Opacity"
                                     Value="0.84"/>
@@ -834,10 +835,10 @@
                         </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground"
-                                    Value="{StaticResource JadeMutedTextBrush}"/>
+                                    Value="{StaticResource JadeDisabledForegroundBrush}"/>
                             <Setter TargetName="ButtonBorder"
                                     Property="Background"
-                                    Value="{StaticResource JadeDisabledBrush}"/>
+                                    Value="{StaticResource JadeDisabledSurfaceBrush}"/>
                             <Setter TargetName="ButtonRoot"
                                     Property="Opacity"
                                     Value="0.84"/>
