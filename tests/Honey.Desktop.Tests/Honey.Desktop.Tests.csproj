@@ -25,6 +25,12 @@
     <Content Include="..\..\src\Honey.Desktop\Assets\JadeControlTheme.xaml"
              Link="Fixtures\JadeControlTheme.xaml"
              CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Honey.Desktop\Settings\SettingsWindow.xaml"
+             Link="Fixtures\SettingsWindow.xaml"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Honey.Desktop\App.xaml"
+             Link="Fixtures\App.xaml"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
