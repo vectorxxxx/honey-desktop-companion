@@ -161,6 +161,27 @@ public sealed class JadeControlThemeTests
     }
 
     [Fact]
+    public void 设置窗口主题地址不依赖发布程序集名称()
+    {
+        var source = LoadFixture("SettingsWindow.xaml")
+            .Root?
+            .Element(Presentation + "Window.Resources")?
+            .Element(Presentation + "ResourceDictionary")?
+            .Element(Presentation + "ResourceDictionary.MergedDictionaries")?
+            .Elements(Presentation + "ResourceDictionary")
+            .Single(dictionary =>
+                IsJadeThemeSource((string?)dictionary.Attribute("Source")))
+            .Attribute("Source")?
+            .Value;
+
+        Assert.Equal(ThemeSource, source);
+        Assert.DoesNotContain(
+            ";component/",
+            source,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void 墨玉控件模板不回退到系统窗口白色画刷()
     {
         var document = LoadTheme();

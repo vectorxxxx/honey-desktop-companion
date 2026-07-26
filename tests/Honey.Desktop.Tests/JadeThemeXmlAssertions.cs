@@ -5,7 +5,7 @@ namespace Honey.Desktop.Tests;
 internal static class JadeThemeXmlAssertions
 {
     internal const string ThemeSource =
-        "/Honey.Desktop;component/Assets/JadeControlTheme.xaml";
+        "../Assets/JadeControlTheme.xaml";
     internal static readonly XNamespace Presentation =
         "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
     internal static readonly XNamespace Xaml =

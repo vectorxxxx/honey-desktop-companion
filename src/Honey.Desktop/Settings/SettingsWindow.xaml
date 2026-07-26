@@ -10,7 +10,7 @@
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/Honey.Desktop;component/Assets/JadeControlTheme.xaml"/>
+                <ResourceDictionary Source="../Assets/JadeControlTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <Style TargetType="TextBlock">
                 <Setter Property="FontFamily" Value="Microsoft YaHei UI"/>
