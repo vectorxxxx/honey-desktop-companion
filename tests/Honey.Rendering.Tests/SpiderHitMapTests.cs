@@ -33,6 +33,39 @@ public sealed class SpiderHitMapTests
     }
 
     [Fact]
+    public void Contains_小尺寸腿部两侧保留最小抓取容差()
+    {
+        const float scale = 0.45f;
+        var hitMap = SpiderHitMap.CreateDefault(220, 220, scale);
+        var layout = SpiderLayout.Create(220, 220, scale);
+        var leg = layout.Legs[0];
+        var midpoint = new SkiaSharp.SKPoint(
+            (leg.Root.X + leg.Knee.X) / 2,
+            (leg.Root.Y + leg.Knee.Y) / 2);
+        var segmentX = leg.Knee.X - leg.Root.X;
+        var segmentY = leg.Knee.Y - leg.Root.Y;
+        var length = MathF.Sqrt(segmentX * segmentX + segmentY * segmentY);
+        var offsetX = -segmentY / length * 6;
+        var offsetY = segmentX / length * 6;
+
+        Assert.True(hitMap.Contains(midpoint.X + offsetX, midpoint.Y + offsetY));
+    }
+
+    [Fact]
+    public void Contains_身体轮廓外侧仍可抓取但远处保持透明()
+    {
+        var hitMap = SpiderHitMap.CreateDefault(240, 240, 0.6f);
+        var layout = SpiderLayout.Create(240, 240, 0.6f);
+
+        Assert.True(hitMap.Contains(
+            layout.Abdomen.Right + 6,
+            layout.Abdomen.MidY));
+        Assert.False(hitMap.Contains(
+            layout.Abdomen.Right + 30,
+            layout.Abdomen.MidY));
+    }
+
+    [Fact]
     public void CreateDefault_非法尺寸生成空命中图()
     {
         Assert.False(SpiderHitMap.CreateDefault(0, 200, 1).Contains(0, 0));

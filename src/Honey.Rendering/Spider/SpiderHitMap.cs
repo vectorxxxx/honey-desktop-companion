@@ -2,11 +2,14 @@ namespace Honey.Rendering.Spider;
 
 public sealed class SpiderHitMap
 {
+    private const float MinimumGrabRadius = 7;
     private readonly SpiderPose? _pose;
+    private readonly float _grabPadding;
 
-    private SpiderHitMap(SpiderPose? pose)
+    private SpiderHitMap(SpiderPose? pose, float grabPadding = 0)
     {
         _pose = pose;
+        _grabPadding = Math.Max(0, grabPadding);
     }
 
     public static SpiderHitMap CreateDefault(float width, float height, float scale)
@@ -41,14 +44,18 @@ public sealed class SpiderHitMap
             return new SpiderHitMap(null);
         }
 
+        var pose = SpiderGeometry.CreatePose(width, height, snapshot, deviceScale);
         return new SpiderHitMap(
-            SpiderGeometry.CreatePose(width, height, snapshot, deviceScale));
+            pose,
+            MinimumGrabRadius * pose.DeviceScale);
     }
 
     public static SpiderHitMap Create(SpiderPose pose)
     {
         ArgumentNullException.ThrowIfNull(pose);
-        return new SpiderHitMap(pose);
+        return new SpiderHitMap(
+            pose,
+            MinimumGrabRadius * pose.DeviceScale);
     }
 
     public bool Contains(float x, float y)
@@ -58,20 +65,27 @@ public sealed class SpiderHitMap
             return false;
         }
 
-        if (ContainsEllipse(_pose.Abdomen, x, y) || ContainsEllipse(_pose.Head, x, y))
+        if (ContainsEllipse(_pose.Abdomen, x, y, _grabPadding)
+            || ContainsEllipse(_pose.Head, x, y, 0))
         {
             return true;
         }
 
         return _pose.Legs.Any(leg =>
-            DistanceToSegment(x, y, leg.Root.X, leg.Root.Y, leg.Knee.X, leg.Knee.Y) <= leg.Width / 2
-            || DistanceToSegment(x, y, leg.Knee.X, leg.Knee.Y, leg.Tip.X, leg.Tip.Y) <= leg.Width / 2);
+            DistanceToSegment(x, y, leg.Root.X, leg.Root.Y, leg.Knee.X, leg.Knee.Y)
+                <= Math.Max(leg.Width / 2, _grabPadding)
+            || DistanceToSegment(x, y, leg.Knee.X, leg.Knee.Y, leg.Tip.X, leg.Tip.Y)
+                <= Math.Max(leg.Width / 2, _grabPadding));
     }
 
-    private static bool ContainsEllipse(SkiaSharp.SKRect rectangle, float x, float y)
+    private static bool ContainsEllipse(
+        SkiaSharp.SKRect rectangle,
+        float x,
+        float y,
+        float padding)
     {
-        var radiusX = rectangle.Width / 2;
-        var radiusY = rectangle.Height / 2;
+        var radiusX = rectangle.Width / 2 + padding;
+        var radiusY = rectangle.Height / 2 + padding;
         var normalizedX = (x - rectangle.MidX) / radiusX;
         var normalizedY = (y - rectangle.MidY) / radiusY;
         return normalizedX * normalizedX + normalizedY * normalizedY <= 1;

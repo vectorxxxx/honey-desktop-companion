@@ -47,7 +47,7 @@ public partial class OverlayWindow : Window
     };
     private readonly Stopwatch _movementClock = Stopwatch.StartNew();
     private RenderSnapshot _snapshot;
-    private SpiderHitMap _hitMap = SpiderHitMap.CreateDefault(0, 0, 1);
+    private SpiderHitMap _hitMap = SpiderHitMap.CreateDefault(320, 320, 1);
     private PixelRect _contentBoundsPhysical = new(80, 80, 160, 160);
     private float _canvasCoordinateWidth;
     private float _canvasCoordinateHeight;
@@ -386,6 +386,10 @@ public partial class OverlayWindow : Window
 
     private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
+        if (!_menuOpen)
+        {
+            Cursor = System.Windows.Input.Cursors.SizeAll;
+        }
         var point = e.GetPosition(SpiderCanvas);
         var lookX = SpiderCanvas.ActualWidth <= 0
             ? 0
