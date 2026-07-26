@@ -41,6 +41,8 @@ public partial class SettingsWindow : Window
         ModePreference = SelectedTag(ModeCombo, "auto"),
         StartWithWindows = AutoStartCheck.IsChecked == true,
         FocusMode = FocusCheck.IsChecked == true,
+        AutonomousMovementEnabled = AutonomousMovementCheck.IsChecked == true,
+        AllowCrossMonitorRoaming = CrossMonitorCheck.IsChecked == true,
         AiEnabled = AiCheck.IsChecked == true,
         AiEndpoint = AiEndpointText.Text,
         AiModel = AiModelText.Text,
@@ -56,6 +58,8 @@ public partial class SettingsWindow : Window
         SelectTag(ModeCombo, settings.ModePreference);
         AutoStartCheck.IsChecked = settings.StartWithWindows;
         FocusCheck.IsChecked = settings.FocusMode;
+        AutonomousMovementCheck.IsChecked = settings.AutonomousMovementEnabled;
+        CrossMonitorCheck.IsChecked = settings.AllowCrossMonitorRoaming;
         AiCheck.IsChecked = settings.AiEnabled;
         AiEndpointText.Text = settings.AiEndpoint;
         AiModelText.Text = settings.AiModel;

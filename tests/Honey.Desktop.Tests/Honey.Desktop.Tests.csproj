@@ -31,6 +31,9 @@
     <Content Include="..\..\src\Honey.Desktop\Settings\SettingsWindow.xaml"
              Link="Fixtures\SettingsWindow.xaml"
              CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Honey.Desktop\Settings\SettingsWindow.xaml.cs"
+             Link="Fixtures\SettingsWindow.xaml.cs"
+             CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\src\Honey.Desktop\App.xaml"
              Link="Fixtures\App.xaml"
              CopyToOutputDirectory="PreserveNewest" />
