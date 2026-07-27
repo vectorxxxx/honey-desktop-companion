@@ -42,14 +42,14 @@ public sealed record SpiderLayout(
             center.Y - unit * 1.02f,
             unit * 0.90f,
             unit * 0.66f);
-        float[] rootY = [-0.58f, -0.31f, 0.02f, 0.28f];
-        float[] rootX = [0.34f, 0.48f, 0.57f, 0.55f];
-        float[] hipX = [0.72f, 0.82f, 0.84f, 0.78f];
-        float[] hipY = [-0.76f, -0.39f, 0.13f, 0.49f];
-        float[] kneeX = [1.18f, 1.31f, 1.34f, 1.20f];
-        float[] kneeY = [-1.01f, -0.52f, 0.35f, 0.79f];
+        float[] rootY = [-0.78f, -0.64f, -0.50f, -0.38f];
+        float[] rootX = [0.34f, 0.42f, 0.45f, 0.43f];
+        float[] hipX = [0.72f, 0.84f, 0.90f, 0.82f];
+        float[] hipY = [-0.92f, -0.68f, -0.34f, -0.08f];
+        float[] kneeX = [1.18f, 1.31f, 1.38f, 1.22f];
+        float[] kneeY = [-1.08f, -0.72f, -0.14f, 0.48f];
         float[] tipX = [1.58f, 1.70f, 1.72f, 1.53f];
-        float[] tipY = [-1.28f, -0.65f, 0.55f, 1.06f];
+        float[] tipY = [-1.28f, -0.80f, 0.18f, 1.06f];
         var legs = new SpiderLeg[8];
         for (var side = -1; side <= 1; side += 2)
         {

@@ -194,8 +194,8 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         var berserkRedSamples = 0;
         var normalNeutralSamples = 0;
         var normalRedSamples = 0;
-        // 后景腿靠身体的一端会按设计被遮挡，因此取各外段更靠外的三个内部位置。
-        foreach (var amount in new[] { 0.60f, 0.75f, 0.88f })
+        // 后景腿贴近头胸部的一端会按设计被遮挡，因此取外端三个内部位置避免身体遮挡。
+        foreach (var amount in new[] { 0.85f, 0.90f, 0.95f })
         {
             var sample = new SKPoint(
                 start.X + (end.X - start.X) * amount,

@@ -62,7 +62,7 @@ public sealed class SpiderHitMapTests
             layout.Abdomen.MidY));
         Assert.False(hitMap.Contains(
             layout.Abdomen.Right + 30,
-            layout.Abdomen.MidY));
+            layout.Abdomen.Bottom + 42));
     }
 
     [Fact]
