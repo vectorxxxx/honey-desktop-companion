@@ -367,7 +367,7 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
-    public void Create_八足采用隐藏根部与三段扇形布局()
+    public void Create_八足从头胸部两侧形成镜像有序扇形()
     {
         var layout = SpiderLayout.Create(320, 320, 1);
 
@@ -378,10 +378,13 @@ public sealed class WhiteJadeSpiderSceneTests
             Assert.True(float.IsFinite(leg.Hip.X) && float.IsFinite(leg.Hip.Y));
             Assert.True(float.IsFinite(leg.Knee.X) && float.IsFinite(leg.Knee.Y));
             Assert.True(float.IsFinite(leg.Tip.X) && float.IsFinite(leg.Tip.Y));
+            Assert.InRange(leg.Root.Y, layout.Head.Top, layout.Head.Bottom);
             Assert.True(Distance(leg.Root, leg.Hip) > 0);
             Assert.True(Distance(leg.Hip, leg.Knee) > 0);
             Assert.True(Distance(leg.Knee, leg.Tip) > 0);
             Assert.True(Math.Abs(leg.Root.X - layout.Center.X) < Math.Abs(leg.Hip.X - layout.Center.X));
+            Assert.True(Math.Abs(leg.Hip.X - layout.Center.X) < Math.Abs(leg.Knee.X - layout.Center.X));
+            Assert.True(Math.Abs(leg.Knee.X - layout.Center.X) < Math.Abs(leg.Tip.X - layout.Center.X));
         });
 
         for (var side = 0; side < 2; side++)
@@ -389,8 +392,21 @@ public sealed class WhiteJadeSpiderSceneTests
             var legs = layout.Legs.Skip(side * 4).Take(4).ToArray();
             for (var index = 1; index < legs.Length; index++)
             {
+                Assert.True(legs[index - 1].Root.Y < legs[index].Root.Y);
                 Assert.True(legs[index - 1].Hip.Y < legs[index].Hip.Y);
+                Assert.True(legs[index - 1].Knee.Y < legs[index].Knee.Y);
+                Assert.True(legs[index - 1].Tip.Y < legs[index].Tip.Y);
             }
+        }
+
+        for (var index = 0; index < 4; index++)
+        {
+            var left = layout.Legs[index];
+            var right = layout.Legs[index + 4];
+            AssertMirror(left.Root, right.Root, layout.Center.X);
+            AssertMirror(left.Hip, right.Hip, layout.Center.X);
+            AssertMirror(left.Knee, right.Knee, layout.Center.X);
+            AssertMirror(left.Tip, right.Tip, layout.Center.X);
         }
     }
 
@@ -565,6 +581,12 @@ public sealed class WhiteJadeSpiderSceneTests
         var deltaX = to.X - from.X;
         var deltaY = to.Y - from.Y;
         return MathF.Sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
+    private static void AssertMirror(SKPoint left, SKPoint right, float axisX)
+    {
+        Assert.Equal(left.Y, right.Y, 3);
+        Assert.Equal(axisX - left.X, right.X - axisX, 3);
     }
 
     private static int CountDifferentPixels(SKBitmap left, SKBitmap right)
