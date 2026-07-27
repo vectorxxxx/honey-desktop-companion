@@ -42,8 +42,11 @@ public static class SpiderGeometry
             var phase = moving
                 ? safe.StridePhase * MathF.Tau + gaitParity * MathF.PI
                 : (float)(safe.AnimationTime * cadence + index * Math.PI / 2);
+            var movementAmplitude = Math.Min(
+                moodAmplitude * (1.2f + safe.NormalizedSpeed * 1.8f),
+                1.4f);
             var amplitude = moving
-                ? leg.Width * moodAmplitude * (1.2f + safe.NormalizedSpeed * 1.8f)
+                ? leg.Width * movementAmplitude
                 : leg.Width * moodAmplitude * 1.25f;
             var lift = MathF.Sin(phase) * amplitude;
             var sweep = moving ? MathF.Cos(phase) * amplitude * 0.35f : 0;

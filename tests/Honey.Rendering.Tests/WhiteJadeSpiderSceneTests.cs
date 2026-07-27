@@ -330,6 +330,38 @@ public sealed class WhiteJadeSpiderSceneTests
     }
 
     [Fact]
+    public void CreatePose_最大移动步态保持同侧足序且外段互不相交()
+    {
+        var representativePhases = new[]
+        {
+            0f, 0.125f, 0.25f, 0.375f,
+            0.5f, 0.625f, 0.75f, 0.875f
+        };
+        var densePhases = Enumerable.Range(0, 360)
+            .Select(index => index / 360f);
+
+        foreach (var stridePhase in representativePhases
+            .Concat(densePhases)
+            .Distinct())
+        {
+            var pose = SpiderGeometry.CreatePose(
+                320,
+                320,
+                Snapshot(PetMode.Normal, 0) with
+                {
+                    Mood = PetMood.Alert,
+                    NormalizedSpeed = 1,
+                    StridePhase = stridePhase,
+                    FacingX = 0,
+                    FacingY = -1
+                });
+
+            AssertLegFanRemainsOrdered(pose.Legs.Take(4), stridePhase, "左侧");
+            AssertLegFanRemainsOrdered(pose.Legs.Skip(4), stridePhase, "右侧");
+        }
+    }
+
+    [Fact]
     public void CreatePose_方向旋转保持三段长度与解剖层级()
     {
         var up = SpiderGeometry.CreatePose(256, 256, Snapshot(PetMode.Normal) with
@@ -582,6 +614,95 @@ public sealed class WhiteJadeSpiderSceneTests
         var deltaY = to.Y - from.Y;
         return MathF.Sqrt(deltaX * deltaX + deltaY * deltaY);
     }
+
+    private static void AssertLegFanRemainsOrdered(
+        IEnumerable<SpiderLeg> sideLegs,
+        float stridePhase,
+        string side)
+    {
+        var legs = sideLegs.ToArray();
+        for (var index = 0; index < legs.Length - 1; index++)
+        {
+            var current = legs[index];
+            var next = legs[index + 1];
+            Assert.True(
+                current.Hip.Y < next.Hip.Y
+                    && current.Knee.Y < next.Knee.Y
+                    && current.Tip.Y < next.Tip.Y,
+                $"{side}第 {index + 1}/{index + 2} 条腿在步相 {stridePhase:F4} 发生足序反转。");
+        }
+
+        for (var firstIndex = 0; firstIndex < legs.Length; firstIndex++)
+        {
+            var firstSegments = new[]
+            {
+                (legs[firstIndex].Hip, legs[firstIndex].Knee),
+                (legs[firstIndex].Knee, legs[firstIndex].Tip)
+            };
+            for (var secondIndex = firstIndex + 1; secondIndex < legs.Length; secondIndex++)
+            {
+                var secondSegments = new[]
+                {
+                    (legs[secondIndex].Hip, legs[secondIndex].Knee),
+                    (legs[secondIndex].Knee, legs[secondIndex].Tip)
+                };
+                foreach (var first in firstSegments)
+                {
+                    foreach (var second in secondSegments)
+                    {
+                        Assert.False(
+                            SegmentsIntersect(
+                                first.Item1,
+                                first.Item2,
+                                second.Item1,
+                                second.Item2),
+                            $"{side}第 {firstIndex + 1}/{secondIndex + 1} 条腿在步相 {stridePhase:F4} 发生外段交叉。");
+                    }
+                }
+            }
+        }
+    }
+
+    private static bool SegmentsIntersect(
+        SKPoint firstStart,
+        SKPoint firstEnd,
+        SKPoint secondStart,
+        SKPoint secondEnd)
+    {
+        const float epsilon = 0.0001f;
+        var firstSideA = Cross(firstStart, firstEnd, secondStart);
+        var firstSideB = Cross(firstStart, firstEnd, secondEnd);
+        var secondSideA = Cross(secondStart, secondEnd, firstStart);
+        var secondSideB = Cross(secondStart, secondEnd, firstEnd);
+        if (firstSideA * firstSideB < 0
+            && secondSideA * secondSideB < 0)
+        {
+            return true;
+        }
+
+        return (MathF.Abs(firstSideA) <= epsilon
+                && IsPointOnSegment(secondStart, firstStart, firstEnd, epsilon))
+            || (MathF.Abs(firstSideB) <= epsilon
+                && IsPointOnSegment(secondEnd, firstStart, firstEnd, epsilon))
+            || (MathF.Abs(secondSideA) <= epsilon
+                && IsPointOnSegment(firstStart, secondStart, secondEnd, epsilon))
+            || (MathF.Abs(secondSideB) <= epsilon
+                && IsPointOnSegment(firstEnd, secondStart, secondEnd, epsilon));
+    }
+
+    private static bool IsPointOnSegment(
+        SKPoint point,
+        SKPoint start,
+        SKPoint end,
+        float epsilon) =>
+        point.X >= Math.Min(start.X, end.X) - epsilon
+        && point.X <= Math.Max(start.X, end.X) + epsilon
+        && point.Y >= Math.Min(start.Y, end.Y) - epsilon
+        && point.Y <= Math.Max(start.Y, end.Y) + epsilon;
+
+    private static float Cross(SKPoint start, SKPoint end, SKPoint point) =>
+        (end.X - start.X) * (point.Y - start.Y)
+        - (end.Y - start.Y) * (point.X - start.X);
 
     private static void AssertMirror(SKPoint left, SKPoint right, float axisX)
     {

@@ -60,7 +60,7 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
             viewportWidth,
             viewportHeight,
             berserkSnapshot);
-        using var atlas = new ContrastingBodyAtlas(bodyColor);
+        using var atlas = new TransparentBodyAtlas();
         using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
         using var berserk = Render(
             scene,
@@ -82,7 +82,6 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
                 normal,
                 leg.Hip,
                 leg.Knee,
-                leg.Width * 0.76f,
                 bodyColor,
                 $"第{legIndex + 1}条腿的髋膝段");
             verifiedSegments++;
@@ -91,7 +90,6 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
                 normal,
                 leg.Knee,
                 leg.Tip,
-                leg.Width * 0.52f,
                 bodyColor,
                 $"第{legIndex + 1}条腿的膝足段");
             verifiedSegments++;
@@ -194,76 +192,74 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         SKBitmap normal,
         SKPoint start,
         SKPoint end,
-        float segmentWidth,
         SKColor bodyColor,
         string description)
     {
         var berserkRedSamples = 0;
         var normalNeutralSamples = 0;
         var normalRedSamples = 0;
-        // 后景腿贴近头胸部的一端会按设计被遮挡，因此取外端三个内部位置避免身体遮挡。
-        foreach (var amount in new[] { 0.85f, 0.90f, 0.95f })
+        // 透明身体图集暴露完整后景腿，在段体内部三个四分点精确采样且不使用搜索窗口。
+        var samples = SamplePixelsInsideSegment(start, end);
+        var sampleCoordinates = string.Join(
+            ", ",
+            samples.Select(point => $"({point.X}, {point.Y})"));
+        Assert.True(
+            samples.Distinct().Count() == 3,
+            $"{description} 的内部采样像素不独立：{sampleCoordinates}。");
+        foreach (var sample in samples)
         {
-            var sample = new SKPoint(
-                start.X + (end.X - start.X) * amount,
-                start.Y + (end.Y - start.Y) * amount);
-            var radius = Math.Max(
-                1,
-                (int)MathF.Ceiling(segmentWidth * 0.18f));
-            berserkRedSamples += HasPixelNear(
+            berserkRedSamples += HasPixelAt(
                 berserk,
                 sample,
-                radius,
                 pixel => IsRedJadePixel(pixel, bodyColor)) ? 1 : 0;
-            normalNeutralSamples += HasPixelNear(
+            normalNeutralSamples += HasPixelAt(
                 normal,
                 sample,
-                radius,
                 pixel => IsNeutralJadePixel(pixel, bodyColor)) ? 1 : 0;
-            normalRedSamples += HasPixelNear(
+            normalRedSamples += HasPixelAt(
                 normal,
                 sample,
-                radius,
                 pixel => IsRedJadePixel(pixel, bodyColor)) ? 1 : 0;
         }
 
         Assert.True(
             berserkRedSamples >= 2,
-            $"{description} 只有 {berserkRedSamples}/3 个内部采样点呈红玉材质。");
+            $"{description} 只有 {berserkRedSamples}/3 个内部采样点呈红玉材质；坐标：{sampleCoordinates}。");
         Assert.True(
             normalNeutralSamples >= 2,
-            $"{description} 的普通态缺少中性白玉负对照。");
-        Assert.Equal(0, normalRedSamples);
+            $"{description} 的普通态缺少中性白玉负对照；坐标：{sampleCoordinates}。");
+        Assert.True(
+            normalRedSamples == 0,
+            $"{description} 的普通态出现 {normalRedSamples}/3 个红玉像素；坐标：{sampleCoordinates}。");
     }
 
-    private static bool HasPixelNear(
+    private static IReadOnlyList<SKPointI> SamplePixelsInsideSegment(
+        SKPoint start,
+        SKPoint end)
+    {
+        var deltaX = end.X - start.X;
+        var deltaY = end.Y - start.Y;
+        return new[] { 0.25f, 0.50f, 0.75f }
+            .Select(amount => new SKPointI(
+                (int)MathF.Round(start.X + deltaX * amount),
+                (int)MathF.Round(start.Y + deltaY * amount)))
+            .ToArray();
+    }
+
+    private static bool HasPixelAt(
         SKBitmap bitmap,
-        SKPoint center,
-        int radius,
+        SKPointI point,
         Func<SKColor, bool> predicate)
     {
-        var centerX = (int)MathF.Round(center.X);
-        var centerY = (int)MathF.Round(center.Y);
-        if (centerX - radius < 0
-            || centerY - radius < 0
-            || centerX + radius >= bitmap.Width
-            || centerY + radius >= bitmap.Height)
+        if (point.X < 0
+            || point.Y < 0
+            || point.X >= bitmap.Width
+            || point.Y >= bitmap.Height)
         {
             return false;
         }
 
-        for (var y = centerY - radius; y <= centerY + radius; y++)
-        {
-            for (var x = centerX - radius; x <= centerX + radius; x++)
-            {
-                if (predicate(bitmap.GetPixel(x, y)))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return predicate(bitmap.GetPixel(point.X, point.Y));
     }
 
     private static bool IsRedJadePixel(SKColor pixel, SKColor bodyColor) =>
@@ -366,6 +362,34 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         public void Dispose()
         {
         }
+    }
+
+    private sealed class TransparentBodyAtlas : ISpiderBodyAtlas
+    {
+        private readonly SKBitmap _bitmap = new(
+            128,
+            128,
+            SKColorType.Bgra8888,
+            SKAlphaType.Premul);
+
+        public TransparentBodyAtlas()
+        {
+            _bitmap.Erase(SKColors.Transparent);
+        }
+
+        public bool TryGetFrame(
+            PetMode mode,
+            SpiderDirection direction,
+            out SpiderAtlasFrame frame)
+        {
+            frame = new SpiderAtlasFrame(
+                _bitmap,
+                new SKRectI(0, 0, _bitmap.Width, _bitmap.Height),
+                new SKPoint(0.5f, 0.54f));
+            return true;
+        }
+
+        public void Dispose() => _bitmap.Dispose();
     }
 
     private sealed class ContrastingBodyAtlas : ISpiderBodyAtlas
