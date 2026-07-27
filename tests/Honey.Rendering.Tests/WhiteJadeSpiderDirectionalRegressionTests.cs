@@ -8,19 +8,25 @@ namespace Honey.Rendering.Tests;
 public sealed class WhiteJadeSpiderDirectionalRegressionTests
 {
     [Fact]
-    public void 向上与斜向会使用不同精绘方向且中心保持稳定()
+    public void 向上斜向与向右会使用不同精绘方向且中心保持稳定()
     {
         using var scene = new WhiteJadeSpiderScene();
         using var up = Render(scene, Snapshot(0, -1));
         using var diagonal = Render(scene, Snapshot(0.707f, -0.707f));
+        using var right = Render(scene, Snapshot(1, 0));
 
         Assert.True(CountDifferentPixels(up, diagonal) > 1_500);
-        var upCenter = CenterOfOpaque(up);
-        var diagonalCenter = CenterOfOpaque(diagonal);
-        Assert.InRange(upCenter.X - diagonalCenter.X, -8, 8);
-        Assert.InRange(upCenter.Y - diagonalCenter.Y, -8, 8);
+        Assert.True(CountDifferentPixels(diagonal, right) > 1_500);
+        var upCenter = CenterOfSolidPixels(up);
+        var diagonalCenter = CenterOfSolidPixels(diagonal);
+        var rightCenter = CenterOfSolidPixels(right);
+        Assert.InRange(upCenter.X - diagonalCenter.X, -10f, 10f);
+        Assert.InRange(upCenter.Y - diagonalCenter.Y, -10f, 10f);
+        Assert.InRange(rightCenter.X - diagonalCenter.X, -10f, 10f);
+        Assert.InRange(rightCenter.Y - diagonalCenter.Y, -10f, 10f);
         SavePreview(up, "normal-up.png");
         SavePreview(diagonal, "normal-diagonal.png");
+        SavePreview(right, "normal-right.png");
     }
 
     [Fact]
@@ -101,8 +107,9 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         using var scene = new WhiteJadeSpiderScene(atlas, ownsAtlas: false);
         using var up = Render(scene, Snapshot(0, -1));
         using var diagonal = Render(scene, Snapshot(0.707f, -0.707f));
+        using var right = Render(scene, Snapshot(1, 0));
 
-        Assert.Equal([12, 9], atlas.RequestedDirections);
+        Assert.Equal([12, 9, 6], atlas.RequestedDirections);
     }
 
     [Fact]
@@ -285,16 +292,18 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         + Math.Abs(pixel.Green - reference.Green)
         + Math.Abs(pixel.Blue - reference.Blue);
 
-    private static SKPointI CenterOfOpaque(SKBitmap bitmap)
+    private static SKPoint CenterOfSolidPixels(SKBitmap bitmap)
     {
-        long sumX = 0;
-        long sumY = 0;
+        double sumX = 0;
+        double sumY = 0;
         var count = 0;
+        // 过滤低透明粒子与抗锯齿边缘，避免方向无关特效干扰主体中心。
         for (var y = 0; y < bitmap.Height; y++)
         {
             for (var x = 0; x < bitmap.Width; x++)
             {
-                if (bitmap.GetPixel(x, y).Alpha <= 8)
+                var pixel = bitmap.GetPixel(x, y);
+                if (pixel.Alpha < 128)
                 {
                     continue;
                 }
@@ -305,7 +314,10 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
             }
         }
 
-        return new SKPointI((int)(sumX / count), (int)(sumY / count));
+        Assert.True(count > 0);
+        return new SKPoint(
+            (float)(sumX / count),
+            (float)(sumY / count));
     }
 
     private static void SavePreview(SKBitmap bitmap, string fileName)
