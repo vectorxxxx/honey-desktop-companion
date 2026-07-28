@@ -42,37 +42,19 @@ public sealed record SpiderLayout(
             center.Y - unit * 1.02f,
             unit * 0.90f,
             unit * 0.66f);
-        float[] rootY = [-0.78f, -0.64f, -0.50f, -0.38f];
-        float[] rootX = [0.34f, 0.42f, 0.45f, 0.43f];
-        float[] hipX = [0.72f, 0.84f, 0.90f, 0.82f];
-        float[] hipY = [-0.92f, -0.68f, -0.34f, -0.08f];
-        float[] kneeX = [1.18f, 1.31f, 1.38f, 1.22f];
-        float[] kneeY = [-1.08f, -0.72f, -0.14f, 0.48f];
-        float[] tipX = [1.58f, 1.70f, 1.72f, 1.53f];
-        float[] tipY = [-1.28f, -0.80f, 0.18f, 1.06f];
+        var silhouette = SpiderLegSilhouette.Create(safeScale);
         var legs = new SpiderLeg[8];
         for (var side = -1; side <= 1; side += 2)
         {
             for (var index = 0; index < 4; index++)
             {
-                var root = new SKPoint(
-                    center.X + side * unit * rootX[index],
-                    center.Y + unit * rootY[index]);
-                var hip = new SKPoint(
-                    center.X + side * unit * hipX[index],
-                    center.Y + unit * hipY[index]);
-                var knee = new SKPoint(
-                    center.X + side * unit * kneeX[index],
-                    center.Y + unit * kneeY[index]);
-                var tip = new SKPoint(
-                    center.X + side * unit * tipX[index],
-                    center.Y + unit * tipY[index]);
+                var local = silhouette[index];
                 legs[(side < 0 ? 0 : 4) + index] =
                     new SpiderLeg(
-                        root,
-                        hip,
-                        knee,
-                        tip,
+                        ToWorld(local.Root, side, center, unit),
+                        ToWorld(local.Hip, side, center, unit),
+                        ToWorld(local.Knee, side, center, unit),
+                        ToWorld(local.Tip, side, center, unit),
                         Math.Max(4.5f * safeDeviceScale, unit * 0.17f),
                         index < 2 ? SpiderLegLayer.AboveBody : SpiderLegLayer.BehindBody);
             }
@@ -80,4 +62,11 @@ public sealed record SpiderLayout(
 
         return new SpiderLayout(center, abdomen, head, Array.AsReadOnly(legs));
     }
+
+    private static SKPoint ToWorld(
+        SKPoint local,
+        int side,
+        SKPoint center,
+        float unit) =>
+        new(center.X + side * unit * local.X, center.Y + unit * local.Y);
 }

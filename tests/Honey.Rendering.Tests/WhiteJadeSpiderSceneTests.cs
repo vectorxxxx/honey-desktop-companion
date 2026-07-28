@@ -340,24 +340,28 @@ public sealed class WhiteJadeSpiderSceneTests
         var densePhases = Enumerable.Range(0, 360)
             .Select(index => index / 360f);
 
-        foreach (var stridePhase in representativePhases
-            .Concat(densePhases)
-            .Distinct())
+        foreach (var scale in new[] { 60f / 140f, 1f })
         {
-            var pose = SpiderGeometry.CreatePose(
-                320,
-                320,
-                Snapshot(PetMode.Normal, 0) with
-                {
-                    Mood = PetMood.Alert,
-                    NormalizedSpeed = 1,
-                    StridePhase = stridePhase,
-                    FacingX = 0,
-                    FacingY = -1
-                });
+            foreach (var stridePhase in representativePhases
+                .Concat(densePhases)
+                .Distinct())
+            {
+                var pose = SpiderGeometry.CreatePose(
+                    320,
+                    320,
+                    Snapshot(PetMode.Normal, 0) with
+                    {
+                        Mood = PetMood.Alert,
+                        NormalizedSpeed = 1,
+                        StridePhase = stridePhase,
+                        FacingX = 0,
+                        FacingY = -1,
+                        Scale = scale
+                    });
 
-            AssertLegFanRemainsOrdered(pose.Legs.Take(4), stridePhase, "左侧");
-            AssertLegFanRemainsOrdered(pose.Legs.Skip(4), stridePhase, "右侧");
+                AssertLegFanRemainsOrdered(pose.Legs.Take(4), stridePhase, "左侧");
+                AssertLegFanRemainsOrdered(pose.Legs.Skip(4), stridePhase, "右侧");
+            }
         }
     }
 
