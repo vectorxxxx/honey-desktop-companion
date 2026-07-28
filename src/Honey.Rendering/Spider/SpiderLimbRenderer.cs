@@ -307,6 +307,9 @@ public sealed class SpiderLimbRenderer : IDisposable
             _jointFillPaint.Shader = null;
             _jointFillPaint.Color = palette.LegSurface;
             canvas.DrawPath(path, _jointFillPaint);
+            _edgePaint.Color = CreateMutedEdge(palette.LegShadow);
+            _edgePaint.StrokeWidth = Math.Max(0.8f, width * 0.10f);
+            canvas.DrawPath(path, _edgePaint);
             return;
         }
 

@@ -178,6 +178,30 @@ public sealed class SpiderLimbRendererTests
     }
 
     [Fact]
+    public void DrawJoint_紧凑层以低对比暗边区分关节与腿段()
+    {
+        using var renderer = new SpiderLimbRenderer();
+        var palette = SpiderMaterialPalette.For(PetMode.Normal);
+        using var bitmap = RenderBitmap(120, 120, canvas =>
+            renderer.DrawJoint(
+                canvas,
+                new SKPoint(60, 60),
+                0,
+                40,
+                palette,
+                SpiderDetailLevel.Compact));
+
+        var center = bitmap.GetPixel(60, 60);
+        var leftEdge = bitmap.GetPixel(40, 60);
+
+        Assert.InRange(ColorDistance(center, palette.LegSurface), 0, 8);
+        Assert.True(leftEdge.Alpha >= 128);
+        Assert.True(
+            ColorDistance(leftEdge, palette.LegSurface) >= 20,
+            "紧凑关节边缘必须区别于单层玉色中心，以便与腿段分辨。");
+    }
+
+    [Fact]
     public void DrawSegment_展示层具有独立克制刻线并与标准层有差异()
     {
         using var renderer = new SpiderLimbRenderer();
@@ -565,5 +589,13 @@ public sealed class SpiderLimbRendererTests
         }
 
         return count;
+    }
+
+    private static double ColorDistance(SKColor left, SKColor right)
+    {
+        var red = left.Red - right.Red;
+        var green = left.Green - right.Green;
+        var blue = left.Blue - right.Blue;
+        return Math.Sqrt(red * red + green * green + blue * blue);
     }
 }
