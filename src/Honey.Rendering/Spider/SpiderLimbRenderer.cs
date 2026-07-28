@@ -5,6 +5,7 @@ namespace Honey.Rendering.Spider;
 public sealed class SpiderLimbRenderer : IDisposable
 {
     private const float CurveOffsetRatio = 0.08f;
+    private const float CompactJointMinimumEdgeWidth = 0.45f;
     private const double MinimumVectorLength = 0.001;
     private static readonly float[] SegmentGradientStops = [0, 0.48f, 1];
     private static readonly float[] JointGradientStops = [0, 0.55f, 1];
@@ -308,7 +309,7 @@ public sealed class SpiderLimbRenderer : IDisposable
             _jointFillPaint.Color = palette.LegSurface;
             canvas.DrawPath(path, _jointFillPaint);
             _edgePaint.Color = CreateMutedEdge(palette.LegShadow);
-            _edgePaint.StrokeWidth = Math.Max(0.8f, width * 0.10f);
+            _edgePaint.StrokeWidth = Math.Max(CompactJointMinimumEdgeWidth, width * 0.10f);
             canvas.DrawPath(path, _edgePaint);
             return;
         }

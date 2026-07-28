@@ -202,6 +202,100 @@ public sealed class SpiderLimbRendererTests
     }
 
     [Fact]
+    public void DrawJoint_紧凑层在最小尺寸保留可辨识暗边()
+    {
+        using var renderer = new SpiderLimbRenderer();
+        var layout = SpiderLayout.Create(320, 320, 60f / 140f);
+        var leg = layout.Legs[1];
+        var widths = new[]
+        {
+            ("髋关节", leg.Width * 0.76f),
+            ("膝关节", leg.Width * 0.52f)
+        };
+        var modes = new[]
+        {
+            (PetMode.Normal, "普通态"),
+            (PetMode.Berserk, "狂暴态")
+        };
+
+        foreach (var mode in modes)
+        {
+            var palette = SpiderMaterialPalette.For(mode.Item1);
+            foreach (var joint in widths)
+            {
+                var center = new SKPoint(73.5f, 71.5f);
+                using var bitmap = RenderBitmap(160, 160, canvas =>
+                    renderer.DrawJoint(
+                        canvas,
+                        center,
+                        MathF.PI / 5,
+                        joint.Item2,
+                        palette,
+                        SpiderDetailLevel.Compact));
+
+                var pixels = InspectCompactJointPixels(
+                    bitmap,
+                    center,
+                    MathF.PI / 5,
+                    joint.Item2,
+                    palette.LegSurface);
+                var description = $"{mode.Item2}{joint.Item1}宽度 {joint.Item2:F2}";
+                var nearestCenterPixel = bitmap.GetPixel((int)center.X, (int)center.Y);
+                var minimumDarkEdgeCount = joint.Item1 == "髋关节" ? 3 : 2;
+                Assert.True(
+                    pixels.CenterSurfaceCount >= 1,
+                    $"{description} 中心玉色像素不足：实际 {pixels.CenterSurfaceCount}，最近像素 {nearestCenterPixel}，颜色距离 {ColorDistance(nearestCenterPixel, palette.LegSurface):F2}。");
+                Assert.True(
+                    pixels.DarkEdgeCount >= minimumDarkEdgeCount,
+                    $"{description} 暗边像素不足：实际 {pixels.DarkEdgeCount}，要求至少 {minimumDarkEdgeCount} 个。");
+            }
+        }
+    }
+
+    [Fact]
+    public void DrawOuterSegments_最小尺寸紧凑层在髋膝区域增加关节轮廓()
+    {
+        using var renderer = new SpiderLimbRenderer();
+        var layout = SpiderLayout.Create(320, 320, 60f / 140f);
+        var leg = layout.Legs[1];
+        var palette = SpiderMaterialPalette.For(PetMode.Normal);
+        using var segmentsOnly = RenderBitmap(320, 320, canvas =>
+        {
+            renderer.DrawSegment(
+                canvas,
+                SpiderLimbGeometry.Create(
+                    leg.Hip,
+                    leg.Knee,
+                    leg.Width * 0.76f,
+                    leg.Width * 0.52f),
+                palette,
+                SpiderDetailLevel.Compact);
+            renderer.DrawSegment(
+                canvas,
+                SpiderLimbGeometry.Create(
+                    leg.Knee,
+                    leg.Tip,
+                    leg.Width * 0.52f,
+                    leg.Width * 0.20f),
+                palette,
+                SpiderDetailLevel.Compact);
+        });
+        using var withJoints = RenderBitmap(320, 320, canvas =>
+            renderer.DrawOuterSegments(canvas, leg, palette, SpiderDetailLevel.Compact));
+
+        var radius = Math.Max(4f, leg.Width);
+        var hipDifference = CountDifferentPixelsNear(segmentsOnly, withJoints, leg.Hip, radius);
+        var kneeDifference = CountDifferentPixelsNear(segmentsOnly, withJoints, leg.Knee, radius);
+
+        Assert.True(
+            hipDifference >= 3,
+            $"最小尺寸髋关节区域新增轮廓像素不足：实际 {hipDifference}，要求至少 3 个。");
+        Assert.True(
+            kneeDifference >= 3,
+            $"最小尺寸膝关节区域新增轮廓像素不足：实际 {kneeDifference}，要求至少 3 个。");
+    }
+
+    [Fact]
     public void DrawSegment_展示层具有独立克制刻线并与标准层有差异()
     {
         using var renderer = new SpiderLimbRenderer();
@@ -591,6 +685,85 @@ public sealed class SpiderLimbRendererTests
         return count;
     }
 
+    private static CompactJointPixelStatistics InspectCompactJointPixels(
+        SKBitmap bitmap,
+        SKPoint center,
+        float angleRadians,
+        float width,
+        SKColor surface)
+    {
+        var halfWidth = width * 1.05f / 2;
+        var halfHeight = width * 0.78f / 2;
+        var extent = MathF.Max(halfWidth, halfHeight) + 1.5f;
+        var cosine = MathF.Cos(angleRadians);
+        var sine = MathF.Sin(angleRadians);
+        var centerSurfaceCount = 0;
+        var darkEdgeCount = 0;
+        for (var y = Math.Max(0, (int)MathF.Floor(center.Y - extent));
+             y <= Math.Min(bitmap.Height - 1, (int)MathF.Ceiling(center.Y + extent));
+             y++)
+        {
+            for (var x = Math.Max(0, (int)MathF.Floor(center.X - extent));
+                 x <= Math.Min(bitmap.Width - 1, (int)MathF.Ceiling(center.X + extent));
+                 x++)
+            {
+                var offsetX = x - center.X;
+                var offsetY = y - center.Y;
+                var localX = cosine * offsetX + sine * offsetY;
+                var localY = -sine * offsetX + cosine * offsetY;
+                var radius = MathF.Sqrt(
+                    localX * localX / (halfWidth * halfWidth)
+                    + localY * localY / (halfHeight * halfHeight));
+                var pixel = bitmap.GetPixel(x, y);
+                if (radius <= 0.60f
+                    && pixel.Alpha >= 128
+                    && ColorDistance(pixel, surface) <= 8)
+                {
+                    centerSurfaceCount++;
+                }
+
+                if (radius >= 0.65f
+                    && radius <= 1.35f
+                    && pixel.Alpha >= 128
+                    && ColorDistance(pixel, surface) >= 20)
+                {
+                    darkEdgeCount++;
+                }
+            }
+        }
+
+        return new CompactJointPixelStatistics(centerSurfaceCount, darkEdgeCount);
+    }
+
+    private static int CountDifferentPixelsNear(
+        SKBitmap left,
+        SKBitmap right,
+        SKPoint center,
+        float radius)
+    {
+        var count = 0;
+        var squaredRadius = radius * radius;
+        for (var y = Math.Max(0, (int)MathF.Floor(center.Y - radius));
+             y <= Math.Min(left.Height - 1, (int)MathF.Ceiling(center.Y + radius));
+             y++)
+        {
+            for (var x = Math.Max(0, (int)MathF.Floor(center.X - radius));
+                 x <= Math.Min(left.Width - 1, (int)MathF.Ceiling(center.X + radius));
+                 x++)
+            {
+                var offsetX = x - center.X;
+                var offsetY = y - center.Y;
+                if (offsetX * offsetX + offsetY * offsetY <= squaredRadius
+                    && left.GetPixel(x, y) != right.GetPixel(x, y))
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
     private static double ColorDistance(SKColor left, SKColor right)
     {
         var red = left.Red - right.Red;
@@ -598,4 +771,8 @@ public sealed class SpiderLimbRendererTests
         var blue = left.Blue - right.Blue;
         return Math.Sqrt(red * red + green * green + blue * blue);
     }
+
+    private readonly record struct CompactJointPixelStatistics(
+        int CenterSurfaceCount,
+        int DarkEdgeCount);
 }
