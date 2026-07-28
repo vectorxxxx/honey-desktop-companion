@@ -8,20 +8,22 @@ namespace Honey.Rendering.Tests;
 public sealed class SpiderNaturalSilhouetteTests
 {
     [Theory]
-    [InlineData(60f)]
-    [InlineData(90f)]
-    [InlineData(140f)]
-    [InlineData(240f)]
+    [MemberData(nameof(全尺寸像素))]
     public void Create_各尺寸每条腿均有自然髋膝折角(float petPixels)
     {
         var layout = SpiderLayout.Create(320, 320, petPixels / 140f);
 
-        foreach (var leg in layout.Legs)
+        for (var legIndex = 0; legIndex < layout.Legs.Count; legIndex++)
         {
+            var leg = layout.Legs[legIndex];
             var hipTurn = TurnDegrees(leg.Root, leg.Hip, leg.Knee);
             var kneeTurn = TurnDegrees(leg.Hip, leg.Knee, leg.Tip);
+            var majorTurn = Math.Max(hipTurn, kneeTurn);
 
-            Assert.InRange(Math.Max(hipTurn, kneeTurn), 22f, 85f);
+            Assert.True(
+                majorTurn is >= 22f and <= 85f,
+                $"{petPixels}px 第 {legIndex} 条腿静态主折角 {majorTurn:F3}° 超界，"
+                + $"髋角 {hipTurn:F3}°，膝角 {kneeTurn:F3}°。");
         }
     }
 
@@ -82,39 +84,111 @@ public sealed class SpiderNaturalSilhouetteTests
     }
 
     [Fact]
-    public void CreatePose_最小尺寸警觉步态保持折角与同侧足序()
+    public void Create_六十至九十像素逐像素平滑插值全部关节()
     {
-        foreach (var stridePhase in Enumerable.Range(0, 64).Select(index => index / 64f))
+        const float maximumStepDistance = 0.02f;
+        for (var petPixels = 60; petPixels < 90; petPixels++)
         {
-            var pose = SpiderGeometry.CreatePose(
-                320,
-                320,
-                new RenderSnapshot(
-                    PetMode.Normal,
-                    PetMood.Alert,
-                    0,
-                    -1,
-                    0,
-                    60f / 140f,
-                    "测试") with
-                {
-                    NormalizedSpeed = 1,
-                    StridePhase = stridePhase
-                });
-
-            foreach (var leg in pose.Legs)
+            var current = SpiderLayout.Create(320, 320, petPixels / 140f);
+            var next = SpiderLayout.Create(320, 320, (petPixels + 1) / 140f);
+            for (var legIndex = 0; legIndex < current.Legs.Count; legIndex++)
             {
-                Assert.InRange(
-                    Math.Max(
-                        TurnDegrees(leg.Root, leg.Hip, leg.Knee),
-                        TurnDegrees(leg.Hip, leg.Knee, leg.Tip)),
-                    18f,
-                    85f);
+                var currentJoints = Joints(current.Legs[legIndex]);
+                var nextJoints = Joints(next.Legs[legIndex]);
+                for (var jointIndex = 0; jointIndex < currentJoints.Length; jointIndex++)
+                {
+                    var distance = Distance(
+                        Normalize(current, currentJoints[jointIndex].Point),
+                        Normalize(next, nextJoints[jointIndex].Point));
+                    Assert.True(
+                        distance <= maximumStepDistance,
+                        $"{petPixels}/{petPixels + 1}px 第 {legIndex} 条腿的"
+                        + $"{currentJoints[jointIndex].Name} 插值步长 {distance:F4} 超过"
+                        + $" {maximumStepDistance:F2}。");
+                }
             }
-
-            AssertSameSideOrder(pose.Legs.Take(4), stridePhase, "左侧");
-            AssertSameSideOrder(pose.Legs.Skip(4), stridePhase, "右侧");
         }
+    }
+
+    [Fact]
+    public void CreatePose_全尺寸待机动画始终保持自然折膝()
+    {
+        AngleSample? minimum = null;
+        AngleSample? maximum = null;
+        foreach (var petPixels in PetPixelValues)
+        {
+            for (var sample = 0; sample < 360; sample++)
+            {
+                var animationTime = sample / 360d * Math.Tau / 3.1d;
+                var pose = SpiderGeometry.CreatePose(
+                    320,
+                    320,
+                    new RenderSnapshot(
+                        PetMode.Normal,
+                        PetMood.Curious,
+                        0,
+                        0,
+                        animationTime,
+                        petPixels / 140f,
+                        "测试") with
+                    {
+                        NormalizedSpeed = 0,
+                        FacingX = 0,
+                        FacingY = -1
+                    });
+
+                MeasurePoseAngles(
+                    pose,
+                    petPixels,
+                    animationTime,
+                    ref minimum,
+                    ref maximum);
+            }
+        }
+
+        AssertAngleRange(minimum, maximum, 22f, 85f, "待机动画");
+    }
+
+    [Fact]
+    public void CreatePose_全尺寸最大移动步态保持折角与同侧足序()
+    {
+        AngleSample? minimum = null;
+        AngleSample? maximum = null;
+        foreach (var petPixels in PetPixelValues)
+        {
+            for (var sample = 0; sample < 360; sample++)
+            {
+                var stridePhase = sample / 360f;
+                var pose = SpiderGeometry.CreatePose(
+                    320,
+                    320,
+                    new RenderSnapshot(
+                        PetMode.Normal,
+                        PetMood.Alert,
+                        0,
+                        0,
+                        0,
+                        petPixels / 140f,
+                        "测试") with
+                    {
+                        NormalizedSpeed = 1,
+                        StridePhase = stridePhase,
+                        FacingX = 0,
+                        FacingY = -1
+                    });
+
+                MeasurePoseAngles(
+                    pose,
+                    petPixels,
+                    stridePhase,
+                    ref minimum,
+                    ref maximum);
+                AssertSameSideOrder(pose.Legs.Take(4), stridePhase, $"{petPixels}px 左侧");
+                AssertSameSideOrder(pose.Legs.Skip(4), stridePhase, $"{petPixels}px 右侧");
+            }
+        }
+
+        AssertAngleRange(minimum, maximum, 18f, 85f, "最大移动步态");
     }
 
     [Fact]
@@ -127,10 +201,12 @@ public sealed class SpiderNaturalSilhouetteTests
                 PetMode.Normal,
                 PetMood.Curious,
                 0,
-                -1,
+                0,
                 0,
                 1,
-                "测试"));
+                "测试",
+                FacingX: 0,
+                FacingY: -1));
 
         for (var directionIndex = 0; directionIndex < SpiderDirection.Count; directionIndex++)
         {
@@ -141,26 +217,107 @@ public sealed class SpiderNaturalSilhouetteTests
                 new RenderSnapshot(
                     PetMode.Normal,
                     PetMood.Curious,
-                    MathF.Sin(angle),
-                    -MathF.Cos(angle),
+                    0,
+                    0,
                     0,
                     1,
-                    "测试"));
+                    "测试",
+                    FacingX: MathF.Sin(angle),
+                    FacingY: -MathF.Cos(angle)));
 
             for (var legIndex = 0; legIndex < pose.Legs.Count; legIndex++)
             {
                 var expected = up.Legs[legIndex];
                 var actual = pose.Legs[legIndex];
-                Assert.Equal(
+                AssertTurnPreserved(
                     TurnDegrees(expected.Root, expected.Hip, expected.Knee),
                     TurnDegrees(actual.Root, actual.Hip, actual.Knee),
-                    3);
-                Assert.Equal(
+                    directionIndex,
+                    legIndex,
+                    "髋");
+                AssertTurnPreserved(
                     TurnDegrees(expected.Hip, expected.Knee, expected.Tip),
                     TurnDegrees(actual.Hip, actual.Knee, actual.Tip),
-                    3);
+                    directionIndex,
+                    legIndex,
+                    "膝");
             }
         }
+    }
+
+    public static IEnumerable<object[]> 全尺寸像素 =>
+        PetPixelValues.Select(petPixels => new object[] { petPixels });
+
+    private static IReadOnlyList<float> PetPixelValues { get; } =
+        Enumerable.Range(60, 31)
+            .Select(petPixels => (float)petPixels)
+            .Concat([140f, 240f])
+            .ToArray();
+
+    private static void MeasurePoseAngles(
+        SpiderPose pose,
+        float petPixels,
+        double phase,
+        ref AngleSample? minimum,
+        ref AngleSample? maximum)
+    {
+        for (var legIndex = 0; legIndex < pose.Legs.Count; legIndex++)
+        {
+            var leg = pose.Legs[legIndex];
+            var hipTurn = TurnDegrees(leg.Root, leg.Hip, leg.Knee);
+            var kneeTurn = TurnDegrees(leg.Hip, leg.Knee, leg.Tip);
+            var sample = new AngleSample(
+                petPixels,
+                phase,
+                legIndex,
+                hipTurn,
+                kneeTurn);
+            if (minimum is null || sample.MajorTurn < minimum.Value.MajorTurn)
+            {
+                minimum = sample;
+            }
+
+            if (maximum is null || sample.MajorTurn > maximum.Value.MajorTurn)
+            {
+                maximum = sample;
+            }
+        }
+    }
+
+    private static void AssertAngleRange(
+        AngleSample? minimum,
+        AngleSample? maximum,
+        float lower,
+        float upper,
+        string context)
+    {
+        Assert.NotNull(minimum);
+        Assert.NotNull(maximum);
+        Assert.True(
+            minimum.Value.MajorTurn >= lower,
+            $"{context}最小主折角低于 {lower:F0}°：{Describe(minimum.Value)}");
+        Assert.True(
+            maximum.Value.MajorTurn <= upper,
+            $"{context}最大主折角高于 {upper:F0}°：{Describe(maximum.Value)}");
+    }
+
+    private static string Describe(AngleSample sample) =>
+        $"{sample.PetPixels}px，相位/时间 {sample.Phase:F6}，第 {sample.LegIndex} 条腿，"
+        + $"主折角 {sample.MajorTurn:F3}°，髋角 {sample.HipTurn:F3}°，"
+        + $"膝角 {sample.KneeTurn:F3}°。";
+
+    private static void AssertTurnPreserved(
+        float expected,
+        float actual,
+        int directionIndex,
+        int legIndex,
+        string joint)
+    {
+        var difference = Math.Abs(expected - actual);
+        Assert.True(
+            difference <= 0.001f,
+            $"方向 {directionIndex} 第 {legIndex} 条腿{joint}角变化 {difference:F6}°："
+            + $"期望 {expected:F3}°，实际 {actual:F3}°。");
     }
 
     private static float TurnDegrees(SKPoint start, SKPoint joint, SKPoint end)
@@ -178,6 +335,14 @@ public sealed class SpiderNaturalSilhouetteTests
             (point.X - layout.Center.X) / unit,
             (point.Y - layout.Center.Y) / unit);
     }
+
+    private static (string Name, SKPoint Point)[] Joints(SpiderLeg leg) =>
+    [
+        ("Root", leg.Root),
+        ("Hip", leg.Hip),
+        ("Knee", leg.Knee),
+        ("Tip", leg.Tip)
+    ];
 
     private static void AssertSameSideOrder(
         IEnumerable<SpiderLeg> sideLegs,
@@ -210,5 +375,15 @@ public sealed class SpiderNaturalSilhouetteTests
         var x = second.X - first.X;
         var y = second.Y - first.Y;
         return MathF.Sqrt(x * x + y * y);
+    }
+
+    private readonly record struct AngleSample(
+        float PetPixels,
+        double Phase,
+        int LegIndex,
+        float HipTurn,
+        float KneeTurn)
+    {
+        public float MajorTurn => Math.Max(HipTurn, KneeTurn);
     }
 }

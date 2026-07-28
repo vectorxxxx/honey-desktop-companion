@@ -340,7 +340,13 @@ public sealed class WhiteJadeSpiderSceneTests
         var densePhases = Enumerable.Range(0, 360)
             .Select(index => index / 360f);
 
-        foreach (var scale in new[] { 60f / 140f, 1f })
+        foreach (var scale in new[]
+        {
+            60f / 140f,
+            90f / 140f,
+            1f,
+            240f / 140f
+        })
         {
             foreach (var stridePhase in representativePhases
                 .Concat(densePhases)

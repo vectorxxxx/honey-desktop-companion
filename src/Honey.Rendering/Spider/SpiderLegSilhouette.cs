@@ -12,7 +12,7 @@ internal static class SpiderLegSilhouette
 {
     private static readonly SpiderLegControlPoints[] Base =
     [
-        new(new SKPoint(.34f, -.78f), new SKPoint(.66f, -.96f), new SKPoint(1.35f, -1.15f), new SKPoint(1.48f, -1.28f)),
+        new(new SKPoint(.34f, -.78f), new SKPoint(.66f, -.96f), new SKPoint(1.35f, -1.05f), new SKPoint(1.48f, -1.28f)),
         new(new SKPoint(.42f, -.64f), new SKPoint(.78f, -.82f), new SKPoint(1.22f, -.64f), new SKPoint(1.62f, -.75f)),
         new(new SKPoint(.45f, -.50f), new SKPoint(.84f, -.08f), new SKPoint(1.28f, -.10f), new SKPoint(1.62f, .20f)),
         new(new SKPoint(.43f, -.38f), new SKPoint(.78f, .15f), new SKPoint(1.35f, .52f), new SKPoint(1.48f, .92f))
