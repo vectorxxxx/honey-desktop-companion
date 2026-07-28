@@ -26,21 +26,59 @@ public sealed class SpiderNaturalSilhouetteTests
     }
 
     [Fact]
-    public void Create_紧凑尺寸在六十与九十像素间平滑改变第二条腿膝点()
+    public void Create_最小尺寸增强折膝且在标准尺寸边界连续收敛()
     {
         var at60 = SpiderLayout.Create(320, 320, 60f / 140f);
         var at90 = SpiderLayout.Create(320, 320, 90f / 140f);
         var below90 = SpiderLayout.Create(320, 320, 89.9f / 140f);
         var above90 = SpiderLayout.Create(320, 320, 90.1f / 140f);
+        var movablePointDistances = new List<float>();
 
+        for (var legIndex = 0; legIndex < at60.Legs.Count; legIndex++)
+        {
+            var at60Leg = at60.Legs[legIndex];
+            var at90Leg = at90.Legs[legIndex];
+            var below90Leg = below90.Legs[legIndex];
+            var above90Leg = above90.Legs[legIndex];
+            var joints = new[]
+            {
+                ("Root", at60Leg.Root, at90Leg.Root, below90Leg.Root, above90Leg.Root),
+                ("Hip", at60Leg.Hip, at90Leg.Hip, below90Leg.Hip, above90Leg.Hip),
+                ("Knee", at60Leg.Knee, at90Leg.Knee, below90Leg.Knee, above90Leg.Knee),
+                ("Tip", at60Leg.Tip, at90Leg.Tip, below90Leg.Tip, above90Leg.Tip)
+            };
+
+            foreach (var joint in joints)
+            {
+                var boundaryDistance = Distance(
+                    Normalize(below90, joint.Item4),
+                    Normalize(above90, joint.Item5));
+                Assert.True(
+                    boundaryDistance <= 0.01f,
+                    $"第 {legIndex} 条腿的 {joint.Item1} 在 89.9/90.1px 边界不连续：{boundaryDistance:F4}。");
+            }
+
+            var rootDistance = Distance(
+                Normalize(at60, at60Leg.Root),
+                Normalize(at90, at90Leg.Root));
+            Assert.True(
+                rootDistance <= 0.0005f,
+                $"第 {legIndex} 条腿的 Root 在 60/90px 间发生位移：{rootDistance:F4}。");
+            movablePointDistances.Add(Distance(
+                Normalize(at60, at60Leg.Hip),
+                Normalize(at90, at90Leg.Hip)));
+            movablePointDistances.Add(Distance(
+                Normalize(at60, at60Leg.Knee),
+                Normalize(at90, at90Leg.Knee)));
+            movablePointDistances.Add(Distance(
+                Normalize(at60, at60Leg.Tip),
+                Normalize(at90, at90Leg.Tip)));
+        }
+
+        var maximumMovablePointDistance = movablePointDistances.Max();
         Assert.True(
-            NormalizedDistance(at60, at60.Legs[1].Knee, at90, at90.Legs[1].Knee) >= 0.04f);
-        Assert.True(
-            NormalizedDistance(
-                below90,
-                below90.Legs[1].Knee,
-                above90,
-                above90.Legs[1].Knee) <= 0.01f);
+            maximumMovablePointDistance >= 0.04f,
+            $"60/90px 全部可动骨点的最大归一化距离仅为 {maximumMovablePointDistance:F4}。");
     }
 
     [Fact]
@@ -133,21 +171,12 @@ public sealed class SpiderNaturalSilhouetteTests
         return MathF.Acos(dot) * 180f / MathF.PI;
     }
 
-    private static float NormalizedDistance(
-        SpiderLayout firstLayout,
-        SKPoint first,
-        SpiderLayout secondLayout,
-        SKPoint second)
+    private static SKPoint Normalize(SpiderLayout layout, SKPoint point)
     {
-        var firstUnit = firstLayout.Abdomen.Width / 1.52f;
-        var secondUnit = secondLayout.Abdomen.Width / 1.52f;
-        var normalizedFirst = new SKPoint(
-            (first.X - firstLayout.Center.X) / firstUnit,
-            (first.Y - firstLayout.Center.Y) / firstUnit);
-        var normalizedSecond = new SKPoint(
-            (second.X - secondLayout.Center.X) / secondUnit,
-            (second.Y - secondLayout.Center.Y) / secondUnit);
-        return Distance(normalizedFirst, normalizedSecond);
+        var unit = layout.Abdomen.Width / 1.52f;
+        return new SKPoint(
+            (point.X - layout.Center.X) / unit,
+            (point.Y - layout.Center.Y) / unit);
     }
 
     private static void AssertSameSideOrder(
