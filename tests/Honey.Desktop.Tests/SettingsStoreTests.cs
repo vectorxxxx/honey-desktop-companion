@@ -76,6 +76,25 @@ public sealed class SettingsStoreTests
     }
 
     [Fact]
+    public async Task SaveAsync_旧版本对象保存时写入当前版本并保留主动选择的140像素()
+    {
+        var path = TemporaryPath();
+        var store = new SettingsStore(path);
+
+        await store.SaveAsync(
+            new AppSettings
+            {
+                SettingsVersion = 0,
+                PetSize = 140
+            },
+            TestContext.Current.CancellationToken);
+        var reloaded = await store.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(140, reloaded.PetSize);
+        Assert.Equal(AppSettings.CurrentSettingsVersion, reloaded.SettingsVersion);
+    }
+
+    [Fact]
     public async Task LoadAsync_文件不存在时返回默认设置()
     {
         var path = TemporaryPath();

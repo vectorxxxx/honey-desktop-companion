@@ -104,6 +104,10 @@ public sealed class SettingsStore : ISettingsPersistence
             var temporary = Path.Combine(
                 directory,
                 $"{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
+            var persisted = settings.Normalize() with
+            {
+                SettingsVersion = AppSettings.CurrentSettingsVersion
+            };
             try
             {
                 using (var stream = new FileStream(
@@ -116,7 +120,7 @@ public sealed class SettingsStore : ISettingsPersistence
                 {
                     await JsonSerializer.SerializeAsync(
                         stream,
-                        settings.Normalize(),
+                        persisted,
                         JsonOptions,
                         cancellationToken).ConfigureAwait(false);
                     await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
