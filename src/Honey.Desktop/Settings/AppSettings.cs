@@ -4,7 +4,12 @@ namespace Honey.Desktop.Settings;
 
 public sealed record AppSettings
 {
-    public int PetSize { get; init; } = 140;
+    public const int CurrentSettingsVersion = 1;
+    public const int DefaultPetSize = 80;
+    public const int LegacyDefaultPetSize = 140;
+
+    public int SettingsVersion { get; init; } = CurrentSettingsVersion;
+    public int PetSize { get; init; } = DefaultPetSize;
     public string ActivityLevel { get; init; } = "balanced";
     public string ModePreference { get; init; } = "auto";
     public bool StartWithWindows { get; init; }

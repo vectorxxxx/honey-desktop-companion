@@ -5,6 +5,15 @@ namespace Honey.Desktop.Tests;
 public sealed class AppSettingsTests
 {
     [Fact]
+    public void 默认设置_使用80像素体型和当前版本()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(80, settings.PetSize);
+        Assert.Equal(AppSettings.CurrentSettingsVersion, settings.SettingsVersion);
+    }
+
+    [Fact]
     public void 默认设置_启用自主移动且不允许跨显示器()
     {
         var settings = new AppSettings();
