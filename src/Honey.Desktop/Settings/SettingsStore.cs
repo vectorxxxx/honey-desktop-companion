@@ -58,11 +58,13 @@ public sealed class SettingsStore : ISettingsPersistence
             try
             {
                 using var stream = _openRead(_path);
-                var settings = await JsonSerializer.DeserializeAsync<AppSettings>(
+                using var document = await JsonDocument.ParseAsync(
                     stream,
-                    JsonOptions,
-                    cancellationToken).ConfigureAwait(false);
-                return (settings ?? new AppSettings()).Normalize();
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                var settings = document.RootElement.Deserialize<AppSettings>(JsonOptions)
+                    ?? new AppSettings();
+                var storedVersion = ReadStoredVersion(document.RootElement);
+                return MigrateLoadedSettings(settings, storedVersion).Normalize();
             }
             catch (OperationCanceledException)
             {
@@ -136,6 +138,46 @@ public sealed class SettingsStore : ISettingsPersistence
         {
             _gate.Release();
         }
+    }
+
+    private static int ReadStoredVersion(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return 0;
+        }
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (string.Equals(
+                    property.Name,
+                    nameof(AppSettings.SettingsVersion),
+                    StringComparison.OrdinalIgnoreCase)
+                && property.Value.TryGetInt32(out var version))
+            {
+                return version;
+            }
+        }
+
+        return 0;
+    }
+
+    private static AppSettings MigrateLoadedSettings(
+        AppSettings settings,
+        int storedVersion)
+    {
+        if (storedVersion >= AppSettings.CurrentSettingsVersion)
+        {
+            return settings;
+        }
+
+        return settings with
+        {
+            SettingsVersion = AppSettings.CurrentSettingsVersion,
+            PetSize = settings.PetSize == AppSettings.LegacyDefaultPetSize
+                ? AppSettings.DefaultPetSize
+                : settings.PetSize
+        };
     }
 
     private void PreserveCorruptFile(JsonException parseException)

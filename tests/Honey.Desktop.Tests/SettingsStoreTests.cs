@@ -5,6 +5,77 @@ namespace Honey.Desktop.Tests;
 public sealed class SettingsStoreTests
 {
     [Fact]
+    public async Task LoadAsync_旧版默认140像素迁移为80像素()
+    {
+        var path = TemporaryPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """{"PetSize":140}""",
+            TestContext.Current.CancellationToken);
+
+        var loaded = await new SettingsStore(path).LoadAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(80, loaded.PetSize);
+        Assert.Equal(AppSettings.CurrentSettingsVersion, loaded.SettingsVersion);
+    }
+
+    [Fact]
+    public async Task LoadAsync_旧版自定义尺寸保持不变()
+    {
+        var path = TemporaryPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """{"PetSize":100}""",
+            TestContext.Current.CancellationToken);
+
+        var loaded = await new SettingsStore(path).LoadAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(100, loaded.PetSize);
+        Assert.Equal(AppSettings.CurrentSettingsVersion, loaded.SettingsVersion);
+    }
+
+    [Fact]
+    public async Task LoadAsync_当前版本主动选择140像素保持不变()
+    {
+        var path = TemporaryPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            $$"""{"SettingsVersion":{{AppSettings.CurrentSettingsVersion}},"PetSize":140}""",
+            TestContext.Current.CancellationToken);
+
+        var loaded = await new SettingsStore(path).LoadAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(140, loaded.PetSize);
+    }
+
+    [Fact]
+    public async Task SaveAsync_迁移后保存并重新加载不重复迁移()
+    {
+        var path = TemporaryPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(
+            path,
+            """{"PetSize":140}""",
+            TestContext.Current.CancellationToken);
+        var store = new SettingsStore(path);
+
+        var migrated = await store.LoadAsync(TestContext.Current.CancellationToken);
+        await store.SaveAsync(
+            migrated with { PetSize = 140 },
+            TestContext.Current.CancellationToken);
+        var reloaded = await store.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(140, reloaded.PetSize);
+        Assert.Equal(AppSettings.CurrentSettingsVersion, reloaded.SettingsVersion);
+    }
+
+    [Fact]
     public async Task LoadAsync_文件不存在时返回默认设置()
     {
         var path = TemporaryPath();
