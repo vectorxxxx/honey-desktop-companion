@@ -1,12 +1,26 @@
-# Honey
+<div align="center">
 
-一只住在 Windows 桌面上的白玉蜘蛛灵宠。
+<h1>Honey</h1>
+<p><strong>一只住在 Windows 桌面上的白玉蜘蛛灵宠</strong></p>
 
-[下载最新版 Honey.exe](https://github.com/vectorxxxx/20260724-honey/releases/latest/download/Honey.exe) · [查看 Releases](https://github.com/vectorxxxx/20260724-honey/releases)
+<p>
+  <a href="https://github.com/vectorxxxx/20260724-honey/releases/latest"><img src="https://img.shields.io/github/v/release/vectorxxxx/20260724-honey?style=flat-square&amp;label=release&amp;color=7c3aed" alt="最新版本"></a>
+  <a href="https://github.com/vectorxxxx/20260724-honey/releases"><img src="https://img.shields.io/github/downloads/vectorxxxx/20260724-honey/total?style=flat-square&amp;label=downloads&amp;color=0891b2" alt="总下载量"></a>
+  <img src="https://img.shields.io/badge/Windows_11-x64-0078D4?style=flat-square&amp;logo=windows11&amp;logoColor=white" alt="Windows 11 x64">
+  <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&amp;logo=dotnet&amp;logoColor=white" alt=".NET 10">
+</p>
 
-支持 Windows 11 x64。发布包是自包含单文件，无须安装 .NET。
+<p>
+  <a href="https://github.com/vectorxxxx/20260724-honey/releases/latest/download/Honey.exe"><strong>下载最新版</strong></a>
+  ·
+  <a href="https://github.com/vectorxxxx/20260724-honey/releases">版本记录</a>
+</p>
 
-## 功能
+<img src="src/Honey.Rendering/Assets/white-jade-spider-normal-atlas.png" width="680" alt="Honey 白玉蜘蛛十六方向预览">
+
+</div>
+
+## 特性
 
 - 自主观察、移动、觅食、玩耍、整理和睡眠
 - 鼠标追踪、拖动、抚摸与技能环交互
@@ -14,12 +28,16 @@
 - 托盘控制、专注模式和个性设置
 - 可选 AI 个性；关闭后仍可完整离线运行
 
-## 使用
+`C# 14` · `.NET 10` · `WPF` · `SkiaSharp` · `SQLite`
+
+## 快速开始
 
 1. 下载 `Honey.exe`。
 2. 双击运行，小玉会出现在桌面右下角。
 3. 点击小玉打开技能环，拖动小玉改变位置。
 4. 使用系统托盘中的 Honey 菜单进行设置或退出。
+
+> 支持 Windows 11 x64。`Honey.exe` 是自包含单文件，无须安装 .NET。
 
 关闭设置窗口不会退出程序。请使用托盘菜单中的“退出”，或执行：
 
