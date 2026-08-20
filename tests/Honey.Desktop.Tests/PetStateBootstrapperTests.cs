@@ -39,6 +39,54 @@ public sealed class PetStateBootstrapperTests
         Assert.Equal(PrimaryPetIdentity.Id, loaded.PetId);
     }
 
+    [Fact]
+    public async Task LoadOrCreateAsync_旧版饱和需求会恢复基础值并保留亲密度()
+    {
+        var store = new MemoryStore();
+        var pack = new WhiteJadeSpiderPack();
+        var legacy = pack.CreateInitialState(new DateTimeOffset(2026, 7, 26, 12, 0, 0, TimeSpan.Zero)) with
+        {
+            PetId = PrimaryPetIdentity.Id,
+            Needs = new PetNeeds(1, 0, 1, 0.65, 0)
+        };
+        await store.SaveAsync(legacy, TestContext.Current.CancellationToken);
+
+        var loaded = await PetStateBootstrapper.LoadOrCreateAsync(
+            store,
+            pack,
+            new DateTimeOffset(2026, 7, 29, 12, 0, 0, TimeSpan.Zero),
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0.25, loaded.Needs.Hunger);
+        Assert.Equal(0.85, loaded.Needs.Energy);
+        Assert.Equal(0.65, loaded.Needs.Curiosity);
+        Assert.Equal(0.65, loaded.Needs.Affection);
+        Assert.Equal(0.1, loaded.Needs.Stress);
+    }
+
+    [Fact]
+    public async Task LoadOrCreateAsync_正常存档不会被基础值覆盖()
+    {
+        var store = new MemoryStore();
+        var pack = new WhiteJadeSpiderPack();
+        var persisted = pack.CreateInitialState(DateTimeOffset.UtcNow) with
+        {
+            PetId = PrimaryPetIdentity.Id,
+            Needs = new PetNeeds(0.7, 0.3, 0.8, 0.9, 0)
+        };
+        await store.SaveAsync(persisted, TestContext.Current.CancellationToken);
+
+        var loaded = await PetStateBootstrapper.LoadOrCreateAsync(
+            store,
+            pack,
+            DateTimeOffset.UtcNow,
+            null,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(persisted, loaded);
+    }
+
     private sealed class MemoryStore : IPetStateStore
     {
         public PetState? State { get; private set; }

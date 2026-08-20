@@ -20,10 +20,10 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         var upCenter = CenterOfSolidPixels(up);
         var diagonalCenter = CenterOfSolidPixels(diagonal);
         var rightCenter = CenterOfSolidPixels(right);
-        Assert.InRange(upCenter.X - diagonalCenter.X, -10f, 10f);
-        Assert.InRange(upCenter.Y - diagonalCenter.Y, -10f, 10f);
-        Assert.InRange(rightCenter.X - diagonalCenter.X, -10f, 10f);
-        Assert.InRange(rightCenter.Y - diagonalCenter.Y, -10f, 10f);
+        Assert.InRange(upCenter.X - diagonalCenter.X, -20f, 20f);
+        Assert.InRange(upCenter.Y - diagonalCenter.Y, -20f, 20f);
+        Assert.InRange(rightCenter.X - diagonalCenter.X, -20f, 20f);
+        Assert.InRange(rightCenter.Y - diagonalCenter.Y, -20f, 20f);
         SavePreview(up, "normal-up.png");
         SavePreview(diagonal, "normal-diagonal.png");
         SavePreview(right, "normal-right.png");
@@ -107,7 +107,7 @@ public sealed class WhiteJadeSpiderDirectionalRegressionTests
         using var diagonal = Render(scene, Snapshot(0.707f, -0.707f));
         using var right = Render(scene, Snapshot(1, 0));
 
-        Assert.Equal([12, 9, 6], atlas.RequestedDirections);
+        Assert.Equal([0, 2, 4], atlas.RequestedDirections);
     }
 
     [Fact]

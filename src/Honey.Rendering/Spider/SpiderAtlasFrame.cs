@@ -6,4 +6,5 @@ public readonly record struct SpiderAtlasFrame(
     SKBitmap Bitmap,
     SKRectI Source,
     SKPoint NormalizedAnchor,
-    bool FlipX = false);
+    bool FlipX = false,
+    float RotationRadians = 0);

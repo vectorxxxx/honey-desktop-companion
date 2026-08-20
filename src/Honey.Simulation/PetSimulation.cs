@@ -26,14 +26,18 @@ public sealed class PetSimulation
     public SimulationResult Step(
         PetState state,
         TimeSpan elapsed,
-        double random01)
+        double random01,
+        bool isSleeping = false)
     {
         var snapshot = SimulationSnapshot.Capture(state, elapsed, random01);
 
         // 随机输入已规范化并进入快照，首版暂不伪造随机行为。
         _ = snapshot.Random01;
 
-        var needs = needDynamics.Apply(snapshot.State.Needs, snapshot.AppliedElapsed);
+        var needs = needDynamics.Apply(
+            snapshot.State.Needs,
+            snapshot.AppliedElapsed,
+            isSleeping);
         var mode = modePolicy.Resolve(snapshot.State.Mode, needs.Stress);
         var events = BuildEvents(snapshot.State, mode);
         var nextState = snapshot.State with

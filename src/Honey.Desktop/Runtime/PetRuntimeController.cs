@@ -400,7 +400,11 @@ public sealed class PetRuntimeController :
 
     private void AdvanceSimulation(TimeSpan step)
     {
-        var simulation = _simulation.Step(_state, step, _random.NextDouble());
+        var simulation = _simulation.Step(
+            _state,
+            step,
+            _random.NextDouble(),
+            _activeBehavior.Behavior.Value == BuiltInBehaviorKeys.Sleep);
         _state = simulation.State;
         var mode = PetRuntimePolicy.ApplyModePreference(_settings.ModePreference, _state.Mode);
         _state = _state with

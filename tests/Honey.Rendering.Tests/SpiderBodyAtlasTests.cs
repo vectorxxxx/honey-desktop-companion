@@ -57,7 +57,7 @@ public sealed class SpiderBodyAtlasTests
     }
 
     [Fact]
-    public void 不能四等分的正方形图会按比例边界完整切片()
+    public void 不能四等分的正方形图仍会稳定提取左上基准帧()
     {
         using var normal = CreatePngStream(66, 66);
         using var berserk = CreatePngStream(66, 66);
@@ -71,8 +71,10 @@ public sealed class SpiderBodyAtlasTests
             PetMode.Normal,
             new SpiderDirection(15, 0),
             out var last));
-        Assert.Equal(66, last.Source.Right);
-        Assert.Equal(66, last.Source.Bottom);
+        Assert.Equal(0, last.Source.Left);
+        Assert.Equal(0, last.Source.Top);
+        Assert.Equal((int)MathF.Round(66 / 4f), last.Source.Right);
+        Assert.Equal((int)MathF.Round(66 / 4f), last.Source.Bottom);
     }
 
     [Fact]
@@ -95,27 +97,32 @@ public sealed class SpiderBodyAtlasTests
     }
 
     [Fact]
-    public void 默认图集会逐格提供完整十六向且不隐式镜像()
+    public void 默认图集以腹部为锚点旋转同一精绘基准帧()
     {
         using var atlas = EmbeddedSpiderBodyAtlas.LoadDefault();
-        var sources = new HashSet<SKRectI>();
+        var frames = new List<SpiderAtlasFrame>();
         for (var index = 0; index < SpiderDirection.Count; index++)
         {
             Assert.True(atlas.TryGetFrame(
                 PetMode.Normal,
                 new SpiderDirection(index, index * MathF.Tau / SpiderDirection.Count),
                 out var frame));
-            Assert.False(frame.FlipX);
-            Assert.Equal(
-                (int)MathF.Round((index % 4) * frame.Bitmap.Width / 4f),
-                frame.Source.Left);
-            Assert.Equal(
-                (int)MathF.Round((index / 4) * frame.Bitmap.Height / 4f),
-                frame.Source.Top);
-            sources.Add(frame.Source);
+            frames.Add(frame);
         }
 
-        Assert.Equal(SpiderDirection.Count, sources.Count);
+        Assert.All(frames, frame =>
+        {
+            Assert.Equal(frames[0].Source, frame.Source);
+            Assert.Equal(0.5f, frame.NormalizedAnchor.X, 4);
+            Assert.Equal(0.40625f, frame.NormalizedAnchor.Y, 4);
+            Assert.False(frame.FlipX);
+        });
+        var rotation = typeof(SpiderAtlasFrame).GetProperty("RotationRadians");
+        Assert.NotNull(rotation);
+        Assert.Equal(-MathF.PI, Assert.IsType<float>(rotation.GetValue(frames[0])), 4);
+        Assert.Equal(-MathF.PI / 2, Assert.IsType<float>(rotation.GetValue(frames[4])), 4);
+        Assert.Equal(0, Assert.IsType<float>(rotation.GetValue(frames[8])), 4);
+        Assert.Equal(MathF.PI / 2, Assert.IsType<float>(rotation.GetValue(frames[12])), 4);
     }
 
     private static MemoryStream CreateAtlasStream() => CreatePngStream(64, 64);

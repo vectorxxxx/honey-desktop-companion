@@ -87,18 +87,17 @@ public sealed class EmbeddedSpiderBodyAtlas : ISpiderBodyAtlas
         }
 
         var bitmap = mode == PetMode.Berserk ? _berserk : _normal;
-        var index = ((direction.Index % SpiderDirection.Count) + SpiderDirection.Count)
+        var logicalIndex = ((direction.Index % SpiderDirection.Count) + SpiderDirection.Count)
             % SpiderDirection.Count;
-        var column = index % 4;
-        var row = index / 4;
-        var left = (int)MathF.Round(column * bitmap.Width / 4f);
-        var top = (int)MathF.Round(row * bitmap.Height / 4f);
-        var right = (int)MathF.Round((column + 1) * bitmap.Width / 4f);
-        var bottom = (int)MathF.Round((row + 1) * bitmap.Height / 4f);
+        var right = (int)MathF.Round(bitmap.Width / 4f);
+        var bottom = (int)MathF.Round(bitmap.Height / 4f);
+        var rotation =
+            logicalIndex * MathF.Tau / SpiderDirection.Count - MathF.PI;
         frame = new SpiderAtlasFrame(
             bitmap,
-            SKRectI.Create(left, top, right - left, bottom - top),
-            new SKPoint(0.5f, 0.54f));
+            SKRectI.Create(0, 0, right, bottom),
+            new SKPoint(0.5f, 0.40625f),
+            RotationRadians: rotation);
         return true;
     }
 

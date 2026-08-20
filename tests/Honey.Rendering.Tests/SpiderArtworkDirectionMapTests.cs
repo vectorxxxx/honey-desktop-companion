@@ -5,7 +5,7 @@ namespace Honey.Rendering.Tests;
 public sealed class SpiderArtworkDirectionMapTests
 {
     [Fact]
-    public void 原创图集校准会覆盖全部十六格且不会重复()
+    public void 精绘方向与移动逻辑方向保持一一对应()
     {
         var mapped = Enumerable.Range(0, SpiderDirection.Count)
             .Select(index => SpiderArtworkDirectionMap.Map(
@@ -15,9 +15,6 @@ public sealed class SpiderArtworkDirectionMapTests
             .Select(direction => direction.Index)
             .ToArray();
 
-        Assert.Equal(SpiderDirection.Count, mapped.Distinct().Count());
-        Assert.Equal(12, mapped[0]);
-        Assert.Equal(9, mapped[2]);
-        Assert.Equal(0, mapped[8]);
+        Assert.Equal(Enumerable.Range(0, SpiderDirection.Count), mapped);
     }
 }

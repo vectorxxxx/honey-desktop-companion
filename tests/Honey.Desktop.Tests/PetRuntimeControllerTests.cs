@@ -184,6 +184,27 @@ public sealed class PetRuntimeControllerTests
     }
 
     [Fact]
+    public void RequestSkill_精力耗尽后睡眠会持续恢复精力()
+    {
+        var time = new ManualTimeProvider(DateTimeOffset.Parse("2026-07-26T00:00:00Z"));
+        var initial = new WhiteJadeSpiderPack().CreateInitialState(time.GetUtcNow()) with
+        {
+            Needs = new Honey.Domain.Model.PetNeeds(0.4, 0, 0.6, 0.5, 0.2)
+        };
+        using var runtime = new PetRuntimeController(
+            initial,
+            new AppSettings(),
+            time,
+            new Random(17),
+            startTimer: false);
+
+        runtime.RequestSkill(new BehaviorKey(BuiltInBehaviorKeys.Sleep));
+        runtime.Tick(TimeSpan.FromSeconds(2));
+
+        Assert.True(runtime.State.Needs.Energy > initial.Needs.Energy);
+    }
+
+    [Fact]
     public void TryRequestAiSkill_仅允许AI白名单并执行技能冷却()
     {
         var fixture = CreateRuntime();

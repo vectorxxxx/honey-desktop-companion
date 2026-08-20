@@ -437,6 +437,10 @@ public sealed class WhiteJadeSpiderScene : IRenderScene, IDisposable
             SKFilterMode.Linear,
             SKMipmapMode.Linear);
         canvas.Save();
+        canvas.RotateRadians(
+            frame.RotationRadians,
+            pose.Center.X,
+            pose.Center.Y);
         if (frame.FlipX)
         {
             canvas.Scale(-1, 1, destination.MidX, destination.MidY);
