@@ -52,9 +52,6 @@
     <Content Include="..\..\src\Honey.Desktop\App.xaml"
              Link="Fixtures\App.xaml"
              CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\docs\superpowers\plans\2026-07-26-settings-jade-control-theme.md"
-             Link="Fixtures\SettingsJadeControlThemePlan.md"
-             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

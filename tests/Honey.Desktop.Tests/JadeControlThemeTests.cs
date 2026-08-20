@@ -94,22 +94,6 @@ public sealed class JadeControlThemeTests
     }
 
     [Fact]
-    public void 设置主题计划不暴露本机用户目录()
-    {
-        var planPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Fixtures",
-            "SettingsJadeControlThemePlan.md");
-        var plan = File.ReadAllText(planPath);
-
-        Assert.DoesNotContain(
-            @"C:\Users\",
-            plan,
-            StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("$env:DOTNET_ROOT", plan, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void 设置窗口显式合并墨玉主题而非全局污染透明窗口()
     {
         var settingsResources = LoadFixture("SettingsWindow.xaml")

@@ -8,6 +8,7 @@
   <a href="https://github.com/vectorxxxx/20260724-honey/releases"><img src="https://img.shields.io/github/downloads/vectorxxxx/20260724-honey/total?style=flat-square&amp;label=downloads&amp;color=0891b2" alt="总下载量"></a>
   <img src="https://img.shields.io/badge/Windows_11-x64-0078D4?style=flat-square&amp;logo=windows11&amp;logoColor=white" alt="Windows 11 x64">
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&amp;logo=dotnet&amp;logoColor=white" alt=".NET 10">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square" alt="MIT License"></a>
 </p>
 
 <p>
@@ -116,4 +117,4 @@ AI 功能默认关闭，后台不会主动请求 AI。启用后只发送必要�
 
 项目借鉴修仙灵宠氛围，但不包含《凡人修仙传》动画的官方模型、贴图、音频或其他提取素材。
 
-第三方依赖见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，许可原文见 [LICENSES](LICENSES)。
+本项目原创代码与素材采用 [MIT License](LICENSE)。第三方依赖见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)，许可原文见 [LICENSES](LICENSES)。
