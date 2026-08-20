@@ -1,13 +1,29 @@
 .vs/
 .idea/
+.dotnet/
 bin/
 obj/
 artifacts/
+docs/
 tmp/
 .superpowers/
 .worktrees/
 *.user
 *.suo
+
+# 本地配置、存档与秘密
+.env
+.env.*
+!.env.example
+settings.json
+secrets.json
+*.db
 *.db-wal
 *.db-shm
 *.log
+
+# 私钥与签名材料
+*.key
+*.pem
+*.pfx
+*.snk
