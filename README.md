@@ -1,5 +1,7 @@
 <div align="center">
 
+<p><strong>简体中文</strong> · <a href="README.en.md">English</a></p>
+
 <h1>Honey</h1>
 <p><strong>一只住在 Windows 桌面上的白玉蜘蛛灵宠</strong></p>
 
