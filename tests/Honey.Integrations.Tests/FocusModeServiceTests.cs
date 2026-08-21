@@ -107,7 +107,7 @@ public sealed class FocusModeServiceTests
         service.Changed += (_, _) => throw new InvalidOperationException("订阅失败");
         service.Changed += (_, _) => Interlocked.Increment(ref received);
 
-        await Task.Delay(80, TestContext.Current.CancellationToken);
+        await probe.WaitForSecondCaptureAsync(TestContext.Current.CancellationToken);
         await service.StopAsync();
         var stoppedAt = Volatile.Read(ref received);
         await Task.Delay(40, TestContext.Current.CancellationToken);
@@ -133,12 +133,24 @@ public sealed class FocusModeServiceTests
 
     private sealed class ConstantFocusProbe(FocusSnapshot snapshot) : IFocusSnapshotProbe
     {
-        public int CaptureCount { get; private set; }
+        private readonly TaskCompletionSource _secondCapture = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _captureCount;
+
+        public int CaptureCount => Volatile.Read(ref _captureCount);
+
         public FocusSnapshot Capture(IReadOnlyCollection<nint> ownWindows)
         {
-            CaptureCount++;
+            if (Interlocked.Increment(ref _captureCount) >= 2)
+            {
+                _secondCapture.TrySetResult();
+            }
+
             return snapshot;
         }
+
+        public Task WaitForSecondCaptureAsync(CancellationToken cancellationToken) =>
+            _secondCapture.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
     }
 
     private sealed class RecordingFocusProbe : IFocusSnapshotProbe
