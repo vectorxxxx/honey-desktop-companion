@@ -6,17 +6,17 @@
 <p><strong>一只住在 Windows 桌面上的白玉蜘蛛灵宠</strong></p>
 
 <p>
-  <a href="https://github.com/vectorxxxx/20260724-honey/releases/latest"><img src="https://img.shields.io/github/v/release/vectorxxxx/20260724-honey?style=flat-square&amp;label=release&amp;color=7c3aed" alt="最新版本"></a>
-  <a href="https://github.com/vectorxxxx/20260724-honey/releases"><img src="https://img.shields.io/github/downloads/vectorxxxx/20260724-honey/total?style=flat-square&amp;label=downloads&amp;color=0891b2" alt="总下载量"></a>
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest"><img src="https://img.shields.io/github/v/release/vectorxxxx/honey-desktop-companion?style=flat-square&amp;label=release&amp;color=7c3aed" alt="最新版本"></a>
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases"><img src="https://img.shields.io/github/downloads/vectorxxxx/honey-desktop-companion/total?style=flat-square&amp;label=downloads&amp;color=0891b2" alt="总下载量"></a>
   <img src="https://img.shields.io/badge/Windows_11-x64-0078D4?style=flat-square&amp;logo=windows11&amp;logoColor=white" alt="Windows 11 x64">
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&amp;logo=dotnet&amp;logoColor=white" alt=".NET 10">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square" alt="MIT License"></a>
 </p>
 
 <p>
-  <a href="https://github.com/vectorxxxx/20260724-honey/releases/latest/download/Honey.exe"><strong>下载最新版</strong></a>
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest/download/Honey.exe"><strong>下载最新版</strong></a>
   ·
-  <a href="https://github.com/vectorxxxx/20260724-honey/releases">版本记录</a>
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases">版本记录</a>
 </p>
 
 <img src="src/Honey.Rendering/Assets/white-jade-spider-normal-atlas.png" width="680" alt="Honey 白玉蜘蛛十六方向预览">
@@ -70,8 +70,8 @@ winget install --id Microsoft.DotNet.SDK.10 -e --source winget
 重新打开 PowerShell，然后执行：
 
 ```powershell
-git clone https://github.com/vectorxxxx/20260724-honey.git
-Set-Location .\20260724-honey
+git clone https://github.com/vectorxxxx/honey-desktop-companion.git
+Set-Location .\honey-desktop-companion
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish.ps1
 ```
 
