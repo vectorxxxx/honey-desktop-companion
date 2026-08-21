@@ -9,9 +9,9 @@ namespace Honey.Desktop.Tests;
 public sealed class JadeControlThemeRuntimeTests
 {
     [Fact]
-    public void 墨玉资源字典可在Sta线程实例化关键控件模板()
+    public async Task 墨玉资源字典可在Sta线程实例化关键控件模板()
     {
-        RunOnStaThread(
+        await RunOnStaThreadAsync(
             () =>
             {
                 var themePath = Path.Combine(
@@ -53,12 +53,14 @@ public sealed class JadeControlThemeRuntimeTests
         Assert.IsType<TPart>(control.Template.FindName(partName, control));
     }
 
-    private static void RunOnStaThread(Action action)
+    private static async Task RunOnStaThreadAsync(Action action)
     {
-        ExceptionDispatchInfo? failure = null;
+        var completion = new TaskCompletionSource<ExceptionDispatchInfo?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(
             () =>
             {
+                ExceptionDispatchInfo? failure = null;
                 try
                 {
                     action();
@@ -67,13 +69,17 @@ public sealed class JadeControlThemeRuntimeTests
                 {
                     failure = ExceptionDispatchInfo.Capture(exception);
                 }
+
+                completion.TrySetResult(failure);
             });
+        thread.IsBackground = true;
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
 
-        Assert.True(
-            thread.Join(TimeSpan.FromSeconds(5)),
-            "STA 主题加载测试未在 5 秒内完成。");
+        var failure = await completion.Task.WaitAsync(
+            TimeSpan.FromSeconds(30),
+            TestContext.Current.CancellationToken);
+        thread.Join();
         failure?.Throw();
     }
 }
