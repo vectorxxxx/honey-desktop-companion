@@ -1,6 +1,7 @@
 ﻿param(
     [string]$Configuration = "Release",
     [string]$Output = "artifacts/win-x64",
+    [string]$FrameworkDependentOutput = "artifacts/win-x64-framework-dependent",
     [string]$DotnetPath
 )
 
@@ -33,6 +34,8 @@ $previousNodeReuse = $env:MSBUILDDISABLENODEREUSE
 $env:DOTNET_ROOT = Split-Path -Parent $dotnet
 $env:MSBUILDDISABLENODEREUSE = "1"
 $outputPath = Resolve-SafePublishOutput -RepositoryRoot $repo -Output $Output
+$frameworkDependentOutputPath = Resolve-SafePublishOutput `
+    -RepositoryRoot $repo -Output $FrameworkDependentOutput
 $stagePath = $null
 
 Push-Location $repo
@@ -75,6 +78,41 @@ try {
     Write-Host ("Published: {0}" -f $item.FullName)
     Write-Host ("Bytes: {0}" -f $item.Length)
     Write-Host ("SHA256: {0}" -f $hash.Hash)
+
+    $frameworkDependentOutputPath = Initialize-PublishOwnership `
+        -RepositoryRoot $repo -Output $frameworkDependentOutputPath
+    $stagePath = New-PublishStagingDirectory -RepositoryRoot $repo
+    & $dotnet publish src/Honey.Desktop/Honey.Desktop.csproj `
+        -c $Configuration -r win-x64 --self-contained false --no-restore `
+        -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
+        -p:PublishReadyToRun=false `
+        -p:EnableCompressionInSingleFile=false `
+        -p:DebugType=embedded `
+        -o $stagePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Framework-dependent publish failed: $LASTEXITCODE"
+    }
+
+    Get-ChildItem -LiteralPath $stagePath -Recurse -File -Filter "*.pdb" |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+    Get-ChildItem -LiteralPath $stagePath -Recurse -Directory |
+        Sort-Object FullName -Descending |
+        Where-Object { @(Get-ChildItem -LiteralPath $_.FullName -Force).Count -eq 0 } |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+    [void](Assert-SingleExecutableStage -RepositoryRoot $repo -Stage $stagePath)
+    $frameworkDependentOutputPath = Install-OwnedPublishStage `
+        -RepositoryRoot $repo -Output $frameworkDependentOutputPath -Stage $stagePath
+    $stagePath = $null
+
+    $frameworkDependentExecutable = Join-Path $frameworkDependentOutputPath "Honey.exe"
+    $frameworkDependentItem = Get-Item -LiteralPath $frameworkDependentExecutable
+    $frameworkDependentHash = Get-FileHash `
+        -LiteralPath $frameworkDependentExecutable -Algorithm SHA256
+    Write-Host ("Published (requires .NET 10 Desktop Runtime): {0}" `
+        -f $frameworkDependentItem.FullName)
+    Write-Host ("Bytes: {0}" -f $frameworkDependentItem.Length)
+    Write-Host ("SHA256: {0}" -f $frameworkDependentHash.Hash)
 }
 finally {
     if ($stagePath -and (Test-Path -LiteralPath $stagePath)) {

@@ -14,7 +14,9 @@
 </p>
 
 <p>
-  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest/download/Honey.exe"><strong>下载最新版</strong></a>
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest/download/Honey-win-x64-self-contained.exe"><strong>下载推荐版</strong></a>
+  ·
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest/download/Honey-win-x64-framework-dependent.exe">下载轻量版</a>
   ·
   <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases">版本记录</a>
 </p>
@@ -35,12 +37,23 @@
 
 ## 快速开始
 
-1. 下载 `Honey.exe`。
+| 版本 | 运行要求 | 适合人群 |
+| --- | --- | --- |
+| `Honey-win-x64-self-contained.exe` | 无须安装 .NET | 推荐大多数用户下载 |
+| `Honey-win-x64-framework-dependent.exe` | 需要 .NET 10 Desktop Runtime | 已安装运行时、希望减少下载量的用户 |
+
+轻量版需要先安装运行时：
+
+```powershell
+winget install --id Microsoft.DotNet.DesktopRuntime.10 -e --source winget
+```
+
+1. 按需下载其中一个 EXE。
 2. 双击运行，小玉会出现在桌面右下角。
 3. 点击小玉打开技能环，拖动小玉改变位置。
 4. 使用系统托盘中的 Honey 菜单进行设置或退出。
 
-> 支持 Windows 11 x64。`Honey.exe` 是自包含单文件，无须安装 .NET。
+> 两个版本均为 Windows 11 x64 单文件程序，功能一致。
 
 关闭设置窗口不会退出程序。请使用托盘菜单中的“退出”，或执行：
 
@@ -75,10 +88,11 @@ Set-Location .\honey-desktop-companion
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish.ps1
 ```
 
-脚本会自动还原依赖、运行 Release 测试并生成：
+脚本会自动还原依赖、运行 Release 测试并生成两个版本：
 
 ```text
 artifacts\win-x64\Honey.exe
+artifacts\win-x64-framework-dependent\Honey.exe
 ```
 
 可选验证：
@@ -103,7 +117,13 @@ gh auth login
 $version = "v1.0.2"
 git tag -a $version -m "发布：Honey $version"
 git push origin $version
-gh release create $version .\artifacts\win-x64\Honey.exe `
+$releaseDir = ".\artifacts\release"
+New-Item -ItemType Directory -Force $releaseDir | Out-Null
+Copy-Item .\artifacts\win-x64\Honey.exe `
+  "$releaseDir\Honey-win-x64-self-contained.exe"
+Copy-Item .\artifacts\win-x64-framework-dependent\Honey.exe `
+  "$releaseDir\Honey-win-x64-framework-dependent.exe"
+gh release create $version "$releaseDir\*.exe" `
   --verify-tag --generate-notes --latest
 ```
 

@@ -14,7 +14,9 @@
 </p>
 
 <p>
-  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest/download/Honey.exe"><strong>Download Honey</strong></a>
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest/download/Honey-win-x64-self-contained.exe"><strong>Download recommended build</strong></a>
+  ·
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest/download/Honey-win-x64-framework-dependent.exe">Download smaller build</a>
   ·
   <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases">Release notes</a>
 </p>
@@ -35,12 +37,23 @@
 
 ## Quick start
 
-1. Download `Honey.exe`.
+| Build | Requirement | Recommended for |
+| --- | --- | --- |
+| `Honey-win-x64-self-contained.exe` | No .NET installation required | Most users |
+| `Honey-win-x64-framework-dependent.exe` | .NET 10 Desktop Runtime | Users who already have the runtime and prefer a smaller download |
+
+Install the runtime before using the smaller build:
+
+```powershell
+winget install --id Microsoft.DotNet.DesktopRuntime.10 -e --source winget
+```
+
+1. Download either EXE.
 2. Run it. Honey appears near the lower-right corner of your desktop.
 3. Click Honey to open the skill menu, or drag it to a new position.
 4. Use the Honey tray menu to change settings or exit.
 
-> Requires Windows 11 x64. `Honey.exe` is a self-contained single file; no .NET installation is required.
+> Both builds are single-file applications for Windows 11 x64 and provide the same features.
 
 Closing the settings window does not quit Honey. Exit from the tray menu, or run:
 
@@ -75,10 +88,11 @@ Set-Location .\honey-desktop-companion
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish.ps1
 ```
 
-The script restores dependencies, runs the Release test suite, and creates:
+The script restores dependencies, runs the Release test suite, and creates both builds:
 
 ```text
 artifacts\win-x64\Honey.exe
+artifacts\win-x64-framework-dependent\Honey.exe
 ```
 
 Optional smoke test:
@@ -103,7 +117,13 @@ After building, choose a new version and publish it:
 $version = "v1.0.2"
 git tag -a $version -m "发布：Honey $version"
 git push origin $version
-gh release create $version .\artifacts\win-x64\Honey.exe `
+$releaseDir = ".\artifacts\release"
+New-Item -ItemType Directory -Force $releaseDir | Out-Null
+Copy-Item .\artifacts\win-x64\Honey.exe `
+  "$releaseDir\Honey-win-x64-self-contained.exe"
+Copy-Item .\artifacts\win-x64-framework-dependent\Honey.exe `
+  "$releaseDir\Honey-win-x64-framework-dependent.exe"
+gh release create $version "$releaseDir\*.exe" `
   --verify-tag --generate-notes --latest
 ```
 
