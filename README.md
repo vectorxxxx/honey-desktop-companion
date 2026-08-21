@@ -100,7 +100,7 @@ gh auth login
 构建完成后，修改版本号并发布：
 
 ```powershell
-$version = "v1.0.1"
+$version = "v1.0.2"
 git tag -a $version -m "发布：Honey $version"
 git push origin $version
 gh release create $version .\artifacts\win-x64\Honey.exe `

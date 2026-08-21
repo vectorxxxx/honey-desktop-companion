@@ -42,7 +42,7 @@ try {
     & $dotnet test Honey.slnx -c $Configuration --no-restore
     if ($LASTEXITCODE -ne 0) { throw "Tests failed: $LASTEXITCODE" }
     & $dotnet restore src/Honey.Desktop/Honey.Desktop.csproj `
-        -r win-x64 -p:PublishReadyToRun=true -p:PublishSingleFile=true `
+        -r win-x64 -p:PublishReadyToRun=false -p:PublishSingleFile=true `
         --source "https://api.nuget.org/v3/index.json"
     if ($LASTEXITCODE -ne 0) { throw "Publish restore failed: $LASTEXITCODE" }
 
@@ -52,7 +52,8 @@ try {
         -c $Configuration -r win-x64 --self-contained true --no-restore `
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
-        -p:PublishReadyToRun=true `
+        -p:PublishReadyToRun=false `
+        -p:EnableCompressionInSingleFile=true `
         -p:DebugType=embedded `
         -o $stagePath
     if ($LASTEXITCODE -ne 0) { throw "Publish failed: $LASTEXITCODE" }

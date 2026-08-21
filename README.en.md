@@ -100,7 +100,7 @@ gh auth login
 After building, choose a new version and publish it:
 
 ```powershell
-$version = "v1.0.1"
+$version = "v1.0.2"
 git tag -a $version -m "发布：Honey $version"
 git push origin $version
 gh release create $version .\artifacts\win-x64\Honey.exe `
