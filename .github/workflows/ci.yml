@@ -40,6 +40,18 @@ jobs:
       - name: 构建
         run: dotnet build Honey.slnx -c Release --no-restore
 
+      - name: "[DEBUG-focus-poll] 重复焦点轮询测试"
+        shell: powershell
+        run: |
+          $runner = Resolve-Path .\tests\Honey.Integrations.Tests\bin\Release\net10.0-windows\Honey.Integrations.Tests.exe
+          1..50 | ForEach-Object {
+            Write-Host "[DEBUG-focus-poll] iteration=$_"
+            & $runner -class Honey.Integrations.Tests.FocusModeServiceTests -noLogo -parallel none
+            if ($LASTEXITCODE -ne 0) {
+              throw "[DEBUG-focus-poll] failed at iteration $_"
+            }
+          }
+
       - name: 运行 .NET 测试
         run: dotnet test Honey.slnx -c Release --no-build
 
