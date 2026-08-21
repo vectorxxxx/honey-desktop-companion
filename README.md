@@ -8,6 +8,7 @@
 <p>
   <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases/latest"><img src="https://img.shields.io/github/v/release/vectorxxxx/honey-desktop-companion?style=flat-square&amp;label=release&amp;color=7c3aed" alt="最新版本"></a>
   <a href="https://github.com/vectorxxxx/honey-desktop-companion/releases"><img src="https://img.shields.io/github/downloads/vectorxxxx/honey-desktop-companion/total?style=flat-square&amp;label=downloads&amp;color=0891b2" alt="总下载量"></a>
+  <a href="https://github.com/vectorxxxx/honey-desktop-companion/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/vectorxxxx/honey-desktop-companion/ci.yml?branch=main&amp;style=flat-square&amp;label=build" alt="构建状态"></a>
   <img src="https://img.shields.io/badge/Windows_11-x64-0078D4?style=flat-square&amp;logo=windows11&amp;logoColor=white" alt="Windows 11 x64">
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&amp;logo=dotnet&amp;logoColor=white" alt=".NET 10">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square" alt="MIT License"></a>

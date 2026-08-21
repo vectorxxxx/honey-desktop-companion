@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用交流与创意讨论
+    url: https://github.com/vectorxxxx/honey-desktop-companion/discussions
+    about: 使用问题、展示分享和未成形的创意请前往 Discussions。
+  - name: 私密漏洞报告
+    url: https://github.com/vectorxxxx/honey-desktop-companion/security/advisories/new
+    about: 安全漏洞请私密提交，不要创建公开 Issue。
