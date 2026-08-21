@@ -11,6 +11,7 @@ public sealed class LicenseResourceTests
 
         Assert.Contains("Honey.LICENSE", resources);
         Assert.Contains("Honey.THIRD-PARTY-NOTICES.md", resources);
+        Assert.Contains("Honey.THIRD-PARTY-NOTICES.en.md", resources);
         Assert.Contains("Honey.LICENSES.Apache-2.0.txt", resources);
         Assert.Contains("Honey.LICENSES.MIT-Microsoft.NET.txt", resources);
         Assert.Contains("Honey.LICENSES.Zlib-GLFW.md", resources);

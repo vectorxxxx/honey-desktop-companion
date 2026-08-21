@@ -1,0 +1,68 @@
+name: Bug report (English)
+description: Report a reproducible problem
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Use private vulnerability reporting for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: Honey version
+      description: Find it on the Release page or in the EXE properties.
+      placeholder: v1.0.2
+    validations:
+      required: true
+  - type: dropdown
+    id: distribution
+    attributes:
+      label: Distribution
+      options:
+        - Self-contained build (no .NET installation required)
+        - Framework-dependent build (.NET 10 Desktop Runtime required)
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2, OS build 26100
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the shortest reliable reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Attach sanitized logs, screenshots, or recordings. Never include secrets, personal paths, or databases.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing Issues and found no duplicate.
+          required: true
+        - label: I removed sensitive information from logs and attachments.
+          required: true

@@ -1,5 +1,7 @@
 # 安全政策
 
+**简体中文** · [English](SECURITY.en.md)
+
 ## 支持范围
 
 安全修复仅面向最新正式版本。请先确认问题仍可在 [Latest Release](https://github.com/vectorxxxx/honey-desktop-companion/releases/latest) 中复现。

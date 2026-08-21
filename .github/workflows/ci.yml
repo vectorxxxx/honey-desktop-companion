@@ -41,9 +41,10 @@ jobs:
         run: dotnet build Honey.slnx -c Release --no-restore
 
       - name: 运行 .NET 测试
-        run: dotnet test Honey.slnx -c Release --no-build --logger trx --results-directory artifacts/test-results
+        run: dotnet test Honey.slnx -c Release --no-build
 
       - name: 运行 PowerShell 回归测试
+        if: always()
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\scripts\windows-powershell-regression.tests.ps1
 
@@ -52,6 +53,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-results
-          path: artifacts/test-results/**/*.trx
+          path: tests/**/TestResults/**
           if-no-files-found: warn
           retention-days: 14

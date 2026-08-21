@@ -1,5 +1,7 @@
 # 参与贡献
 
+**简体中文** · [English](CONTRIBUTING.en.md)
+
 感谢你帮助 Honey 变得更好。提交代码前，请先通过 Issue 描述问题；功能构想和使用交流可以放到 Discussions。
 
 ## 开发环境

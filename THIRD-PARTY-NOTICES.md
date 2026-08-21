@@ -1,5 +1,7 @@
 # 第三方声明
 
+**简体中文** · [English](THIRD-PARTY-NOTICES.en.md)
+
 ## Lucide 图标
 
 Honey 的桌面环形菜单与设置界面使用并按界面尺寸改编了 Lucide 的 Heart、Pause、Play、Moon、Zap、X、Settings、Sparkles、Monitor、Brain、Save 与 RotateCcw 线性图标路径。Lucide 项目采用 ISC License。本项目与 Lucide 官方不存在背书或隶属关系。

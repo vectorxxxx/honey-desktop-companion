@@ -140,4 +140,4 @@ AI features are disabled by default. When enabled, Honey sends only the state su
 
 Honey draws inspiration from the atmosphere of cultivation fantasy, but contains no official models, textures, audio, or extracted assets from the *A Record of a Mortal's Journey to Immortality* animation.
 
-Original code and assets are available under the [MIT License](LICENSE). See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and [LICENSES](LICENSES) for third-party notices and license texts.
+Original code and assets are available under the [MIT License](LICENSE). See [THIRD-PARTY-NOTICES.en.md](THIRD-PARTY-NOTICES.en.md) and [LICENSES](LICENSES) for third-party notices and license texts.

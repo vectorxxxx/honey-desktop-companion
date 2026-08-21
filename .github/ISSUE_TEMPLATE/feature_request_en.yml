@@ -1,0 +1,47 @@
+name: Feature request (English)
+description: Propose a clear and verifiable capability
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the use case and current pain point first.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the expected interaction, behavior, or output.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Pet behavior and interaction
+        - Rendering and animation
+        - AI and personality
+        - Settings and system integration
+        - Performance and reliability
+        - Build, release, and documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing Issues and Discussions and found no duplicate.
+          required: true
+        - label: This proposal does not depend on extracted commercial assets or assets with unclear ownership.
+          required: true
