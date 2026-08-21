@@ -21,7 +21,8 @@
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md"
                       LogicalName="Honey.THIRD-PARTY-NOTICES.md" />
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.en.md"
-                      LogicalName="Honey.THIRD-PARTY-NOTICES.en.md" />
+                      LogicalName="Honey.THIRD-PARTY-NOTICES.en.md"
+                      WithCulture="false" />
     <EmbeddedResource Include="..\..\LICENSES\**\*"
                       LogicalName="Honey.LICENSES.%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
